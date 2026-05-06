@@ -22,6 +22,8 @@ export interface TransferOptions {
   upstream?: string;
   /** Override apiKey (highest priority) */
   apiKey?: string;
+  /** Override model name (highest priority, supersedes modelMap) */
+  modelOverride?: string;
 }
 
 export function createTransfer(options: TransferOptions = {}) {
@@ -41,6 +43,7 @@ export function createTransfer(options: TransferOptions = {}) {
     ""
   );
   const apiKey = options.apiKey ?? fileConfig.apiKey;
+  const modelOverride = options.modelOverride;
 
   const sessions = new SessionStore();
   const app = new Hono();
@@ -99,14 +102,15 @@ export function createTransfer(options: TransferOptions = {}) {
     }
 
     const inputLen = typeof req.input === "string" ? 1 : (req.input as unknown[])?.length ?? 0;
-    console.log(`[transfer] ← POST /v1/responses model=${req.model} stream=${req.stream} input_items=${inputLen} tools=${req.tools?.length ?? 0} prev=${req.previous_response_id ?? "none"}`);
+    const model = modelOverride ?? resolveModel(req.model, fileConfig.modelMap);
+    console.log(`[transfer] ← POST /v1/responses model=${req.model}${model !== req.model ? ` → ${model}` : ""} stream=${req.stream} input_items=${inputLen} tools=${req.tools?.length ?? 0} prev=${req.previous_response_id ?? "none"}`);
 
     const history = req.previous_response_id
       ? sessions.getHistory(req.previous_response_id)
       : [];
-
-    const model = req.model;
     const chatReq = toChatRequest(req, history, sessions);
+    // Override model AFTER toChatRequest — translate uses req.model internally
+    chatReq.model = model;
     const url = `${upstream}/chat/completions`;
 
     if (req.stream) {
@@ -201,3 +205,16 @@ export { SessionStore } from "./session.js";
 export { toChatRequest, fromChatResponse } from "./translate.js";
 export { translateStream } from "./stream.js";
 export * from "./types.js";
+
+/**
+ * Resolve model name using modelMap.
+ * Lookup order: exact key match → wildcard "*" → original name.
+ */
+function resolveModel(
+  model: string,
+  modelMap: Record<string, string>
+): string {
+  if (modelMap[model]) return modelMap[model];
+  if (modelMap["*"]) return modelMap["*"];
+  return model;
+}

@@ -7,6 +7,8 @@ export interface Config {
   apiKey: string;
   /** Skip TLS certificate verification (for corporate proxies with MITM) */
   insecure: boolean;
+  /** Model name mapping: { "codex-auto-review": "deepseek-v4-pro", "*": "deepseek-v4-pro" } */
+  modelMap: Record<string, string>;
 }
 
 const DEFAULT_CONFIG: Config = {
@@ -14,6 +16,7 @@ const DEFAULT_CONFIG: Config = {
   upstream: "https://openrouter.ai/api/v1",
   apiKey: "",
   insecure: false,
+  modelMap: {},
 };
 
 /**
@@ -37,6 +40,7 @@ export function loadConfig(configPath?: string): Config {
     insecure: parseBool(
       process.env.CODEX_TRANSFER_INSECURE ?? fileConfig.insecure
     ),
+    modelMap: fileConfig.modelMap ?? DEFAULT_CONFIG.modelMap,
   };
 }
 
@@ -45,6 +49,7 @@ interface FileConfig {
   upstream?: string;
   apiKey?: string;
   insecure?: boolean;
+  modelMap?: Record<string, string>;
 }
 
 /**
@@ -81,6 +86,9 @@ function loadConfigFile(explicitPath?: string): FileConfig {
           upstream: typeof parsed.upstream === "string" ? parsed.upstream : undefined,
           apiKey: typeof parsed.apiKey === "string" ? parsed.apiKey : undefined,
           insecure: typeof parsed.insecure === "boolean" ? parsed.insecure : undefined,
+          modelMap: typeof parsed.modelMap === "object" && parsed.modelMap !== null
+            ? parsed.modelMap as Record<string, string>
+            : undefined,
         };
       } catch {
         // Ignore parse errors, continue to next path

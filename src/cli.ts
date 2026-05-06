@@ -15,10 +15,12 @@ for (let i = 0; i < args.length; i++) {
     overrides.port = args[++i];
   } else if ((a === "--upstream" || a === "-u") && args[i + 1]) {
     overrides.upstream = args[++i];
-  } else if ((a === "--api-key") && args[i + 1]) {
+  } else if (a === "--api-key" && args[i + 1]) {
     overrides.apiKey = args[++i];
   } else if ((a === "--config" || a === "-c") && args[i + 1]) {
     overrides.configPath = args[++i];
+  } else if ((a === "--model" || a === "-m") && args[i + 1]) {
+    overrides.model = args[++i];
   } else if (a === "--help" || a === "-h") {
     console.log(`
 codex-transfer — Responses API ↔ Chat Completions bridge
@@ -30,6 +32,7 @@ Options:
   -p, --port PORT        Listen port (default: 4444)
   -u, --upstream URL     Upstream Chat Completions base URL
       --api-key KEY      API key for upstream
+  -m, --model MODEL      Override model name (highest priority model mapping)
   -c, --config PATH      Path to config file (JSON)
   -k, --insecure         Skip TLS certificate verification
   -h, --help             Show this help
@@ -40,6 +43,10 @@ Environment variables:
   CODEX_TRANSFER_API_KEY      Same as --api-key
   CODEX_TRANSFER_CONFIG       Same as --config
   CODEX_TRANSFER_INSECURE     Set to "1" to skip TLS verification
+
+Config file options:
+  modelMap               Model name mapping, e.g. {"*": "deepseek-v4-pro"}
+                         Lookup: exact match → wildcard "*" → original name
 
 Config file locations (searched in order):
   1. --config path
@@ -56,6 +63,7 @@ const { app, port } = createTransfer({
   port: overrides.port ? Number(overrides.port) : undefined,
   upstream: overrides.upstream,
   apiKey: overrides.apiKey,
+  modelOverride: overrides.model,
   disableTlsVerify,
 });
 
