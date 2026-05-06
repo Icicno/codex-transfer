@@ -3,7 +3,14 @@
 import { createTransfer } from "./server.js";
 import { ensureLogDir } from "./config.js";
 import { spawn } from "node:child_process";
-import { appendFileSync, writeFileSync } from "node:fs";
+import {
+  appendFileSync,
+  writeFileSync,
+  statSync,
+  renameSync,
+  unlinkSync,
+  existsSync,
+} from "node:fs";
 import { join } from "node:path";
 
 // Parse CLI args
@@ -70,7 +77,8 @@ Config file locations (searched in order):
 
 if (daemonMode) {
   const logDir = ensureLogDir(overrides.configPath);
-  const logFile = join(logDir, "codex-transfer.log");
+  const ts = formatTimestampCompact(new Date());
+  const logFile = join(logDir, `codex-transfer-${ts}.log`);
   const pidFile = join(logDir, "codex-transfer.pid");
 
   // Filter out --daemon / -d from child args to avoid recursion
@@ -102,19 +110,49 @@ if (daemonMode) {
 
 const logFile = process.env.__CODEX_TRANSFER_LOG;
 if (logFile) {
-  // Redirect all console output to log file
-  const write = (msg: string) => {
+  const logFilePath: string = logFile;
+  const MAX_LOG_SIZE = 10 * 1024 * 1024; // 10MB
+  const MAX_LOG_FILES = 5;
+
+  /** Rotate log files when current file exceeds MAX_LOG_SIZE. */
+  function rotateIfNeeded(): void {
     try {
-      appendFileSync(logFile, msg + "\n");
+      if (!existsSync(logFilePath)) return;
+      const stat = statSync(logFilePath);
+      if (stat.size < MAX_LOG_SIZE) return;
+
+      const base = logFilePath.slice(0, -".log".length);
+
+      // Delete oldest rotation file
+      const oldest = `${base}.${MAX_LOG_FILES}.log`;
+      if (existsSync(oldest)) unlinkSync(oldest);
+
+      // Shift: .4 → .5, .3 → .4, ..., .1 → .2
+      for (let i = MAX_LOG_FILES - 1; i >= 1; i--) {
+        const from = `${base}.${i}.log`;
+        if (existsSync(from)) renameSync(from, `${base}.${i + 1}.log`);
+      }
+
+      // Current → .1
+      renameSync(logFilePath, `${base}.1.log`);
     } catch {
-      // If log file write fails, fall back to stderr
+      // Rotation failure is not fatal
+    }
+  }
+
+  function logWrite(msg: string): void {
+    try {
+      rotateIfNeeded();
+      const ts = formatTimestamp(new Date());
+      appendFileSync(logFilePath, `[${ts} transfer] ${msg}\n`);
+    } catch {
       process.stderr.write(msg + "\n");
     }
-  };
+  }
 
-  console.log = (...args: unknown[]) => write(args.map(String).join(" "));
-  console.error = (...args: unknown[]) => write("[ERROR] " + args.map(String).join(" "));
-  console.warn = (...args: unknown[]) => write("[WARN] " + args.map(String).join(" "));
+  console.log = (...args: unknown[]) => logWrite(args.map(String).join(" "));
+  console.error = (...args: unknown[]) => logWrite("[ERROR] " + args.map(String).join(" "));
+  console.warn = (...args: unknown[]) => logWrite("[WARN] " + args.map(String).join(" "));
 }
 
 // ── Start server ────────────────────────────────────────────────────────────
@@ -132,3 +170,23 @@ const { serve } = await import("@hono/node-server");
 serve({ fetch: app.fetch, port }, (info) => {
   console.log(`codex-transfer listening on 127.0.0.1:${info.port}`);
 });
+
+// ── Helpers ──────────────────────────────────────────────────────────────────
+
+/** Format date as `yyyy-MM-dd HH:mm:ss` for log prefixes. */
+function formatTimestamp(d: Date): string {
+  const pad = (n: number) => String(n).padStart(2, "0");
+  return (
+    `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}` +
+    ` ${pad(d.getHours())}:${pad(d.getMinutes())}:${pad(d.getSeconds())}`
+  );
+}
+
+/** Format date as `yyyyMMdd-HHmmss` for log filenames. */
+function formatTimestampCompact(d: Date): string {
+  const pad = (n: number) => String(n).padStart(2, "0");
+  return (
+    `${d.getFullYear()}${pad(d.getMonth() + 1)}${pad(d.getDate())}` +
+    `-${pad(d.getHours())}${pad(d.getMinutes())}${pad(d.getSeconds())}`
+  );
+}
