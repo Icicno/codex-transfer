@@ -1,0 +1,14 @@
+# dev files
+node_modules/
+dist/
+*.tgz
+
+# ide
+.vscode/
+
+# os
+.DS_Store
+Thumbs.db
+
+# npm
+.npmignore

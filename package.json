@@ -1,0 +1,58 @@
+{
+  "name": "codex-transfer",
+  "version": "0.2.0",
+  "description": "Responses API ↔ Chat Completions translation bridge for Codex CLI — use DeepSeek, Kimi, Qwen, and other providers with Codex",
+  "type": "module",
+  "main": "dist/codex-transfer.mjs",
+  "bin": {
+    "codex-transfer": "dist/codex-transfer.mjs"
+  },
+  "files": [
+    "dist/codex-transfer.mjs",
+    "README.md",
+    "README.zh-CN.md",
+    "LICENSE"
+  ],
+  "scripts": {
+    "build": "node build.mjs",
+    "build:tsc": "tsc --noEmit",
+    "start": "node dist/codex-transfer.mjs",
+    "dev": "tsx src/cli.ts",
+    "prepublishOnly": "npm run build:tsc && npm run build"
+  },
+  "keywords": [
+    "codex",
+    "openai",
+    "responses-api",
+    "chat-completions",
+    "deepseek",
+    "kimi",
+    "qwen",
+    "proxy",
+    "bridge",
+    "api-translation"
+  ],
+  "author": "classicicn",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/cbq/codex-transfer"
+  },
+  "homepage": "https://github.com/cbq/codex-transfer#readme",
+  "bugs": {
+    "url": "https://github.com/cbq/codex-transfer/issues"
+  },
+  "dependencies": {
+    "hono": "^4.0.0",
+    "@hono/node-server": "^1.0.0"
+  },
+  "devDependencies": {
+    "esbuild": "^0.25.0",
+    "typescript": "^5.5.0",
+    "tsx": "^4.0.0",
+    "@types/node": "^22.0.0"
+  },
+  "engines": {
+    "node": ">=18.0.0"
+  }
+}
