@@ -1,7 +1,7 @@
 {
-  "name": "codex-transfer",
+  "name": "@classicicn/codex-transfer",
   "version": "0.2.0",
-  "description": "Responses API ↔ Chat Completions translation bridge for Codex CLI — use DeepSeek, Kimi, Qwen, and other providers with Codex",
+  "description": "Responses API ↔ Chat Completions translation bridge for Codex — use DeepSeek, Kimi, Qwen, and other providers with Codex",
   "type": "module",
   "main": "dist/codex-transfer.mjs",
   "bin": {
@@ -26,8 +26,6 @@
     "responses-api",
     "chat-completions",
     "deepseek",
-    "kimi",
-    "qwen",
     "proxy",
     "bridge",
     "api-translation"
@@ -36,11 +34,11 @@
   "license": "MIT",
   "repository": {
     "type": "git",
-    "url": "https://github.com/cbq/codex-transfer"
+    "url": "https://github.com/Icicno/codex-transfer"
   },
-  "homepage": "https://github.com/cbq/codex-transfer#readme",
+  "homepage": "https://github.com/Icicno/codex-transfer#readme",
   "bugs": {
-    "url": "https://github.com/cbq/codex-transfer/issues"
+    "url": "https://github.com/Icicno/codex-transfer/issues"
   },
   "dependencies": {
     "hono": "^4.0.0",

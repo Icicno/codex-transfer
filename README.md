@@ -13,12 +13,8 @@ Codex CLI (Responses API) → codex-transfer → DeepSeek (Chat Completions API)
 ## Quick Start
 
 ```bash
-# Install and build
-npm install
-npm run build
-
-# Run
-node dist/codex-transfer.mjs -k
+# One-time run (no install needed)
+npx @classicicn/codex-transfer -k
 ```
 
 ## CLI Options
@@ -93,31 +89,32 @@ codex-transfer --model deepseek-v4-pro -k
 
 ## Usage
 
-### Method 1: Direct execution
+### From npm (recommended)
+
+**Global install** — register `codex-transfer` as a system command:
 
 ```bash
-node dist/codex-transfer.mjs -k -p 4446 -u https://api.deepseek.com/v1
-```
-
-### Method 2: npm link (global command)
-
-```bash
-npm link
-# Then run directly
+npm install -g @classicicn/codex-transfer
 codex-transfer -k
 ```
 
-### Method 3: npx
+**One-time run** — no install, directly execute:
 
 ```bash
-npx codex-transfer -k
+npx @classicicn/codex-transfer -k
 ```
 
-### Method 4: Background (daemon) mode
+**Pass upstream URL and API key**:
 
 ```bash
-# Start as background process (logs → config_dir/logs/)
-node dist/codex-transfer.mjs -d -k
+npx @classicicn/codex-transfer -k -u https://api.deepseek.com/v1 --api-key sk-xxx
+```
+
+### Background (daemon) mode
+
+```bash
+# Global install first, then:
+codex-transfer -d -k
 
 # Output:
 # codex-transfer started in background (PID: 12345)
@@ -132,7 +129,25 @@ tail -f ~/.codex-transfer/logs/codex-transfer.log
 kill $(cat ~/.codex-transfer/logs/codex-transfer.pid)
 ```
 
-### Method 5: As a library
+### Build from source
+
+```bash
+git clone https://github.com/Icicno/codex-transfer.git
+cd codex-transfer
+npm install
+npm run build
+
+# Run directly
+node dist/codex-transfer.mjs -k
+
+# Or link as global command
+npm link
+codex-transfer -k
+```
+
+### As a library (from source only)
+
+> **Note:** The npm package contains only the CLI bundle. To use as a library, clone the repo and import from source.
 
 ```typescript
 import { createTransfer } from "./src/server.js";
@@ -162,15 +177,20 @@ wire_api = "responses"
 
 ## Supported Providers
 
+Any provider that implements the OpenAI Chat Completions API format is supported. 
+
 | Provider | Base URL |
 |----------|----------|
 | DeepSeek | `https://api.deepseek.com/v1` |
+| Xiaomi MiMo | `https://api.xiaomimimo.com/v1` |
 | Kimi (Moonshot) | `https://api.moonshot.cn/v1` |
 | Qwen | `https://dashscope.aliyuncs.com/compatible-mode/v1` |
 | Mistral | `https://api.mistral.ai/v1` |
 | Groq | `https://api.groq.com/openai/v1` |
 | xAI | `https://api.x.ai/v1` |
 | OpenRouter | `https://openrouter.ai/api/v1` |
+
+> **Note:** Any OpenAI API-compatible provider should work. If you find a working provider not listed here, feel free to open a PR.
 
 ## Features
 

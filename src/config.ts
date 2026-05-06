@@ -117,7 +117,7 @@ export function resolveConfigDir(configPath?: string): string {
   const candidates: string[] = [];
 
   if (configPath) {
- candidates.push(resolve(configPath));
+    candidates.push(resolve(configPath));
   } else if (process.env.CODEX_TRANSFER_CONFIG) {
     candidates.push(resolve(process.env.CODEX_TRANSFER_CONFIG));
   }

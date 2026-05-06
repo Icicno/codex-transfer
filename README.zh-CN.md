@@ -13,12 +13,8 @@ Codex CLI (Responses API) → codex-transfer → DeepSeek (Chat Completions API)
 ## 快速开始
 
 ```bash
-# 安装依赖并打包
-npm install
-npm run build
-
-# 启动
-node dist/codex-transfer.mjs -k
+# 无需安装，直接运行
+npx @classicicn/codex-transfer -k
 ```
 
 ## 命令行参数
@@ -93,31 +89,32 @@ codex-transfer --model deepseek-v4-pro -k
 
 ## 使用方式
 
-### 方式一：直接运行打包产物
+### 通过 npm 使用（推荐）
+
+**全局安装** — 将 `codex-transfer` 注册为系统命令：
 
 ```bash
-node dist/codex-transfer.mjs -k -p 4446 -u https://api.deepseek.com/v1
-```
-
-### 方式二：npm link（全局命令）
-
-```bash
-npm link
-# 之后可直接执行
+npm install -g @classicicn/codex-transfer
 codex-transfer -k
 ```
 
-### 方式三：npx
+**免安装运行** — 直接通过 npx 执行：
 
 ```bash
-npx codex-transfer -k
+npx @classicicn/codex-transfer -k
 ```
 
-### 方式四：后台运行
+**指定上游地址和 API Key**：
 
 ```bash
-# 启动后台进程（日志输出到配置文件同级 logs/ 目录）
-node dist/codex-transfer.mjs -d -k
+npx @classicicn/codex-transfer -k -u https://api.deepseek.com/v1 --api-key sk-xxx
+```
+
+### 后台运行（daemon 模式）
+
+```bash
+# 需先全局安装，然后：
+codex-transfer -d -k
 
 # 输出示例：
 # codex-transfer started in background (PID: 12345)
@@ -132,7 +129,25 @@ tail -f ~/.codex-transfer/logs/codex-transfer.log
 kill $(cat ~/.codex-transfer/logs/codex-transfer.pid)
 ```
 
-### 方式五：作为库使用
+### 本地编译源码
+
+```bash
+git clone https://github.com/Icicno/codex-transfer.git
+cd codex-transfer
+npm install
+npm run build
+
+# 直接运行
+node dist/codex-transfer.mjs -k
+
+# 或链接为全局命令
+npm link
+codex-transfer -k
+```
+
+### 作为库使用（仅限源码）
+
+> **注意：** npm 包仅包含 CLI 打包产物。如需作为库使用，请 clone 仓库后从源码导入。
 
 ```typescript
 import { createTransfer } from "./src/server.js";
@@ -162,15 +177,20 @@ wire_api = "responses"
 
 ## 支持的提供商
 
+任何实现了 OpenAI Chat Completions API 格式的提供商理论上都支持。
+
 | 提供商 | 基础 URL |
 |--------|----------|
 | DeepSeek | `https://api.deepseek.com/v1` |
+| Xiaomi MiMo | `https://api.xiaomimimo.com/v1` |
 | Kimi (Moonshot) | `https://api.moonshot.cn/v1` |
 | Qwen | `https://dashscope.aliyuncs.com/compatible-mode/v1` |
 | Mistral | `https://api.mistral.ai/v1` |
 | Groq | `https://api.groq.com/openai/v1` |
 | xAI | `https://api.x.ai/v1` |
 | OpenRouter | `https://openrouter.ai/api/v1` |
+
+> **说明：** 任何兼容 OpenAI API 格式的提供商均可使用。如果你发现列表之外的可用提供商，欢迎提交 PR。
 
 ## 功能特性
 

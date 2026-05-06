@@ -1,4 +1,5 @@
 import { Hono } from "hono";
+import type { ContentfulStatusCode } from "hono/utils/http-status";
 import { stream } from "hono/streaming";
 import { SessionStore } from "./session.js";
 import { toChatRequest, fromChatResponse } from "./translate.js";
@@ -174,7 +175,7 @@ export function createTransfer(options: TransferOptions = {}) {
       if (!resp.ok) {
         const body = await resp.text().catch(() => "");
         console.error(`upstream ${resp.status}: ${body}`);
-        return c.text(body, resp.status as 400 | 500 | 502);
+        return c.text(body, resp.status as ContentfulStatusCode);
       }
 
       const chatResp = (await resp.json()) as ChatResponse;
