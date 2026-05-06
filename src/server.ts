@@ -32,7 +32,7 @@ export function createTransfer(options: TransferOptions = {}) {
 
   const port = options.port ?? fileConfig.port;
   // TLS verification skip
-  const insecure = options.disableTlsVerify ?? fileConfig.insecure;
+  const insecure = options.disableTlsVerify || fileConfig.insecure;
   if (insecure) {
     process.env.NODE_TLS_REJECT_UNAUTHORIZED = "0";
     console.warn("[transfer] TLS certificate verification disabled (--insecure)");
