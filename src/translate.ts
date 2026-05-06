@@ -118,9 +118,15 @@ export function toChatRequest(
     .filter((t) => t.type === "function")
     .map(convertTool);
 
+  // Post-process: ensure every assistant(tool_calls) is immediately followed
+  // by its corresponding tool messages. Codex may interleave other messages
+  // (user/assistant text) between function_call and function_call_output items,
+  // which violates Chat Completions strict ordering requirement.
+  const reordered = reorderForToolCalls(messages);
+
   return {
     model: req.model,
-    messages,
+    messages: reordered,
     ...(filteredTools.length > 0 ? { tools: filteredTools } : {}),
     ...(req.temperature != null ? { temperature: req.temperature } : {}),
     ...(req.max_output_tokens != null ? { max_tokens: req.max_output_tokens } : {}),
@@ -212,4 +218,76 @@ function valueToText(
       .join("");
   }
   return String(v);
+}
+
+/**
+ * Reorder messages so that every assistant message with tool_calls is
+ * immediately followed by all its corresponding tool messages.
+ *
+ * Codex replays the full conversation as Responses API input[] items, where
+ * function_call and function_call_output may be interleaved with other messages.
+ * Chat Completions providers (DeepSeek, etc.) enforce strict ordering:
+ *   assistant(tool_calls) → tool(call_1) → tool(call_2) → assistant/tool_calls → ...
+ */
+function reorderForToolCalls(messages: ChatMessage[]): ChatMessage[] {
+  // Quick check: if no tool_calls at all, skip reordering.
+  const hasToolCalls = messages.some(
+    (m) => m.role === "assistant" && m.tool_calls?.length
+  );
+  if (!hasToolCalls) return messages;
+
+  // Build a lookup map: tool_call_id → tool message
+  const toolMsgMap = new Map<string, ChatMessage>();
+  for (const msg of messages) {
+    if (msg.role === "tool" && msg.tool_call_id) {
+      // If duplicate tool_call_id exists, last one wins (consistent with providers)
+      toolMsgMap.set(msg.tool_call_id, msg);
+    }
+  }
+
+  // Rebuild: for each non-tool message, push it, then if it's an assistant
+  // with tool_calls, immediately insert the matching tool messages.
+  const result: ChatMessage[] = [];
+  const consumedToolIds = new Set<string>();
+
+  for (const msg of messages) {
+    // Skip tool messages — they'll be re-inserted after their assistant message.
+    if (msg.role === "tool" && msg.tool_call_id) {
+      continue;
+    }
+
+    result.push(msg);
+
+    // After an assistant with tool_calls, insert tool messages inline.
+    if (msg.role === "assistant" && msg.tool_calls?.length) {
+      for (const tc of msg.tool_calls) {
+        const callId = (tc as Record<string, unknown>).id as string | undefined;
+        if (callId) {
+          const toolMsg = toolMsgMap.get(callId);
+          if (toolMsg) {
+            result.push(toolMsg);
+            consumedToolIds.add(callId);
+          } else {
+            // No matching tool output — synthesise an empty one so the provider
+            // doesn't reject the request for missing tool messages.
+            result.push({
+              role: "tool",
+              content: "(no output)",
+              tool_call_id: callId,
+            });
+            consumedToolIds.add(callId);
+          }
+        }
+      }
+    }
+  }
+
+  // Append any orphan tool messages that weren't matched to an assistant.
+  for (const [callId, msg] of toolMsgMap) {
+    if (!consumedToolIds.has(callId)) {
+      result.push(msg);
+    }
+  }
+
+  return result;
 }
