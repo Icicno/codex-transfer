@@ -1,5 +1,5 @@
-import { readFileSync, existsSync } from "node:fs";
-import { resolve, join } from "node:path";
+import { readFileSync, existsSync, mkdirSync } from "node:fs";
+import { resolve, join, dirname } from "node:path";
 
 export interface Config {
   port: number;
@@ -106,4 +106,39 @@ function parseBool(value: unknown): boolean {
     return value === "true" || value === "1";
   }
   return false;
+}
+
+/**
+ * Resolve the directory where the config file lives.
+ * Falls back to process.cwd() if no config file is found.
+ * Used to place logs/ next to the config file.
+ */
+export function resolveConfigDir(configPath?: string): string {
+  const candidates: string[] = [];
+
+  if (configPath) {
+ candidates.push(resolve(configPath));
+  } else if (process.env.CODEX_TRANSFER_CONFIG) {
+    candidates.push(resolve(process.env.CODEX_TRANSFER_CONFIG));
+  }
+
+  candidates.push(
+    resolve("./codex-transfer.json"),
+    join(process.env.HOME ?? "~", ".codex-transfer", "config.json")
+  );
+
+  for (const p of candidates) {
+    if (existsSync(p)) return dirname(p);
+  }
+
+  // No config file found — default to ~/.codex-transfer/
+  return join(process.env.HOME ?? "~", ".codex-transfer");
+}
+
+/** Ensure a logs/ directory exists under the given base directory. */
+export function ensureLogDir(configPath?: string): string {
+  const base = resolveConfigDir(configPath);
+  const logDir = join(base, "logs");
+  mkdirSync(logDir, { recursive: true });
+  return logDir;
 }
