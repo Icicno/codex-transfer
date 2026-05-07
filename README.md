@@ -1,48 +1,86 @@
 # codex-transfer
 
-Responses API ↔ Chat Completions translation bridge for Codex CLI (TypeScript implementation)
+> Responses API ↔ Chat Completions 协议翻译桥接 — 让 Codex CLI 无缝对接 DeepSeek、Kimi、Qwen 等任意 OpenAI 兼容厂商。
 
-## Overview
+## 概述
 
-A lightweight proxy that translates the OpenAI **Responses API** (used by Codex CLI) into the **Chat Completions API**, letting Codex work with any OpenAI-compatible provider — DeepSeek, Kimi, Qwen, Mistral, Groq, xAI, OpenRouter, and more.
+Codex CLI 使用 OpenAI 的 **Responses API** 作为通信协议，而市面上大多数第三方大模型厂商（DeepSeek、Moonshot、Qwen 等）仅实现了早期的 **Chat Completions API**。这两种 API 在请求格式、响应结构、流式事件序列、工具调用表达等方面存在显著差异。
+
+`codex-transfer` 在本地启动一个 HTTP 代理服务，透明地将 Codex CLI 发出的 Responses API 请求翻译为 Chat Completions API 请求，并将上游响应逆向翻译回 Responses API 格式，使 Codex CLI"察觉不到"协议差异。
 
 ```
-Codex CLI (Responses API) → codex-transfer → DeepSeek (Chat Completions API)
+Codex CLI (Responses API)  →  codex-transfer (:4444)  →  第三方厂商 (Chat Completions API)
 ```
 
-## Quick Start
+- **零运行时依赖**：esbuild 打包为单文件 `dist/codex-transfer.mjs`，`npx` 一键运行
+- **无状态**：进程内维护会话，无需外部数据库
+- **约 1500 行 TypeScript**：轻量、可审计
+
+---
+
+## 快速开始
 
 ```bash
-# One-time run (no install needed)
+# 一键运行（无需安装）
 npx @classicicn/codex-transfer -k
+
+# 指定上游厂商
+npx @classicicn/codex-transfer -k -u https://api.deepseek.com/v1 --api-key sk-xxx
+
+# 全局安装后使用
+npm install -g @classicicn/codex-transfer
+codex-transfer -k
 ```
 
-## CLI Options
+---
+
+## CLI 选项
 
 ```
 codex-transfer [options]
 
-Options:
-  -p, --port PORT        Listen port (default: 4444)
-  -u, --upstream URL     Upstream Chat Completions base URL
-      --api-key KEY      API key for upstream
-  -m, --model MODEL      Force override model name (highest priority)
-  -c, --config PATH      Path to config file (JSON)
-  -k, --insecure         Skip TLS certificate verification
-  -d, --daemon           Run in background, logs to logs/ directory
-  -h, --help             Show this help
+选项：
+  -p, --port PORT        监听端口（默认：4444）
+  -u, --upstream URL     上游 Chat Completions 基础 URL
+      --api-key KEY      上游 API Key
+  -m, --model MODEL      强制覆盖模型名称（最高优先级）
+  -c, --config PATH      配置文件路径（JSON 格式）
+  -k, --insecure         跳过 TLS 证书验证（企业代理/自签证书场景）
+  -d, --daemon           后台运行，日志写入 logs/ 目录
+  -h, --help             显示帮助信息
 ```
 
-## Configuration
+### 后台运行（Daemon 模式）
 
-Priority: CLI args > environment variables > config file > defaults
+```bash
+codex-transfer -d -k -u https://api.deepseek.com/v1 --api-key sk-xxx
 
-### Config File
+# 输出：
+# codex-transfer started in background (PID: 12345)
+# Log file: ~/.codex-transfer/logs/codex-transfer-20260507-143022.log
+# PID file: ~/.codex-transfer/logs/codex-transfer.pid
+# Stop:   kill $(cat ~/.codex-transfer/logs/codex-transfer.pid)
+```
 
-Create a JSON config file at one of these locations:
-- `./codex-transfer.json` (current directory)
-- `~/.codex-transfer/config.json` (user home)
-- Custom path via `--config` or `CODEX_TRANSFER_CONFIG`
+Daemon 模式自动将 `console` 输出重定向到带时间戳的日志文件，单文件超过 **10MB** 自动轮转，最多保留 **5 个历史文件**。
+
+---
+
+## 配置
+
+### 优先级
+
+```
+CLI 参数 > 环境变量 > 配置文件 > 默认值
+```
+
+### 配置文件
+
+创建一个 JSON 配置文件，放置在以下任一位置（按搜索顺序）：
+
+1. `--config` 显式路径 或 `CODEX_TRANSFER_CONFIG` 环境变量
+2. `./codex-transfer.json`（当前目录）
+3. `~/.codex-transfer/config.json`（用户主目录）
 
 ```json
 {
@@ -51,14 +89,25 @@ Create a JSON config file at one of these locations:
   "apiKey": "sk-your-key-here",
   "insecure": false,
   "modelMap": {
-    "*": "deepseek-v4-pro"
+    "*": "deepseek-v4-pro",
+    "codex-auto-review": "deepseek-v4-pro"
   }
 }
 ```
 
-### Model Name Mapping
+### 环境变量
 
-Codex CLI may send non-standard model names (e.g. `codex-auto-review`) that the upstream provider doesn't recognize. Use `modelMap` to translate them:
+| 变量 | 默认值 | 说明 |
+|------|--------|------|
+| `CODEX_TRANSFER_PORT` | `4444` | 监听端口 |
+| `CODEX_TRANSFER_UPSTREAM` | `https://openrouter.ai/api/v1` | 上游 Chat Completions 基础 URL |
+| `CODEX_TRANSFER_API_KEY` | _(空)_ | 转发给上游的 API Key |
+| `CODEX_TRANSFER_CONFIG` | _(自动)_ | 配置文件路径 |
+| `CODEX_TRANSFER_INSECURE` | `false` | 设为 `"1"` 或 `"true"` 跳过 TLS 验证 |
+
+### 模型名称映射
+
+Codex CLI 可能发送非标准模型名（如 `codex-auto-review`），上游厂商无法识别。使用 `modelMap` 进行翻译：
 
 ```json
 {
@@ -69,85 +118,211 @@ Codex CLI may send non-standard model names (e.g. `codex-auto-review`) that the 
 }
 ```
 
-Lookup order: exact key match → wildcard `"*"` → original name (passthrough).
+**查找顺序**：精确键匹配 → 通配符 `"*"` → 原名称透传。
 
-Or use `--model` CLI flag to force-override all model names:
+`--model` / `-m` 参数优先级高于 `modelMap`，可强制覆盖所有模型名。
 
-```bash
-codex-transfer --model deepseek-v4-pro -k
+---
+
+## API 端点
+
+| 方法 | 路径 | 功能 |
+|------|------|------|
+| `GET` | `/health` | 健康检查 — 测试上游 `/models` 连通性，返回诊断信息 |
+| `GET` | `/v1/models` | 模型列表代理 — 透明转发上游模型目录 |
+| `POST` | `/v1/responses` | **核心端点** — 接收 Responses API 请求，翻译后转发上游 |
+
+### `/v1/responses` 处理流程
+
+```
+Codex 请求到达
+  → JSON 解析 & 校验
+  → resolveModel() 模型名映射
+  → 加载历史消息（通过 previous_response_id）
+  → toChatRequest() 协议翻译
+  → 分流：
+     ├─ stream=true  → translateStream() SSE 生成器 → text/event-stream
+     └─ stream=false → fetch 上游 → fromChatResponse() → JSON
 ```
 
-### Environment Variables
+---
 
-| Variable | Default | Description |
-|----------|---------|-------------|
-| `CODEX_TRANSFER_PORT` | `4444` | Listen port |
-| `CODEX_TRANSFER_UPSTREAM` | `https://openrouter.ai/api/v1` | Upstream Chat Completions base URL |
-| `CODEX_TRANSFER_API_KEY` | _(empty)_ | API key forwarded to upstream |
-| `CODEX_TRANSFER_CONFIG` | _(auto)_ | Path to config file |
-| `CODEX_TRANSFER_INSECURE` | `false` | Skip TLS certificate verification |
+## 功能详解
 
-## Usage
+### 协议翻译
 
-### From npm (recommended)
+完整实现 Responses API 与 Chat Completions API 之间的双向转换：
 
-**Global install** — register `codex-transfer` as a system command:
+- **请求翻译**：`input` 数组（`function_call` / `function_call_output` / 普通消息）→ Chat Completions `messages[]` 数组
+- **响应翻译**：Chat Completions `choices[0].message` → Responses API `output[]` 结构
+- **系统提示**：`instructions`（Codex CLI 字段）→ Chat Completions `system` 角色
+- **角色映射**：`developer` → `system`
 
-```bash
-npm install -g @classicicn/codex-transfer
-codex-transfer -k
+### 流式翻译（SSE）
+
+上游 Chat Completions 的 SSE 增量流被逐 chunk 翻译为 Responses API 标准事件序列：
+
+```
+response.created
+  → response.output_item.added (message)
+  → response.output_text.delta × N
+  → response.output_item.done
+  → [如有工具调用]
+     response.output_item.added (function_call)
+     → response.function_call_arguments.delta
+     → response.output_item.done
+  → response.completed
 ```
 
-**One-time run** — no install, directly execute:
+**设计要点**：
+- 文本 delta 实时透传，工具调用 delta 在流结束后批量封装（因 Chat Completions 的 tool call 按 index 散落在多个 chunk 中）
+- 顶层异常兜底：即使上游异常断开，也会产出 `response.failed` 事件，确保 Codex CLI 不会挂起等待
 
-```bash
-npx @classicicn/codex-transfer -k
+### 会话管理
+
+Codex CLI 通过 `previous_response_id` 实现多轮对话。`SessionStore` 在内存中维护每个会话的完整消息历史，使得每次 Chat Completions 调用都是**自包含**的（无需依赖上游的上下文缓存）。
+
+```
+┌─────────────────────────────────┐
+│  SessionStore (内存)             │
+│                                 │
+│  history:  Map<response_id,     │
+│                 ChatMessage[]>   │
+│                                 │
+│  reasoning: Map<call_id,        │
+│                 reasoning_text>  │
+│                                 │
+│  turnReasoning: Map<            │
+│    SHA256(content),              │
+│    reasoning_text>               │
+│  )                              │
+└─────────────────────────────────┘
 ```
 
-**Pass upstream URL and API key**:
+### 推理模型支持（DeepSeek-R1 / Kimi-K2.6）
 
-```bash
-npx @classicicn/codex-transfer -k -u https://api.deepseek.com/v1 --api-key sk-xxx
+推理模型会产出 `reasoning_content`（思考过程），该字段需要在多轮对话中**原样回传**，否则模型会拒绝或行为异常。
+
+`codex-transfer` 使用**双索引缓存**来恢复推理内容：
+
+| 索引方式 | 适用场景 | 实现 |
+|----------|---------|------|
+| **call_id 精确匹配** | Codex 使用 `previous_response_id` + tool call 重放 | `Map<call_id, reasoning>` |
+| **内容 SHA256 指纹** | Codex 完整重放 `input[]` 而不使用 `previous_response_id` | `Map<SHA256(content), reasoning>` |
+
+两种机制互为补充，覆盖 Codex CLI 的两种对话重放模式。
+
+### 工具调用处理
+
+- **工具过滤**：自动过滤 `web_search`、`file_search`、`computer` 等 OpenAI 专有内置工具，仅保留 `type: "function"` 的自定义工具，避免第三方厂商拒绝请求
+- **格式转换**：Responses API 扁平格式 `{type, name, description, parameters}` ↔ Chat Completions 嵌套格式 `{type, function: {name, description, parameters}}`
+- **并行工具调用**：连续多个 `function_call` 输入项合并为一条 assistant 消息中的多个 `tool_calls` 条目
+- **消息重排序**：Codex 可能在 `function_call` 和 `function_call_output` 之间插入其他消息，但 DeepSeek 等厂商严格要求 `assistant(tool_calls)` 后紧跟匹配的 `tool` 消息。`reorderForToolCalls()` 自动重排，孤立的 tool call 自动合成空输出
+
+### 健康检查
+
+```
+GET /health → 200 OK
+{
+  "upstream": "https://api.deepseek.com/v1",
+  "apiKeySet": true,
+  "apiKeyPrefix": "sk-abc…",
+  "upstreamStatus": 200,
+  "upstreamOk": true
+}
 ```
 
-### Background (daemon) mode
+---
 
-```bash
-# Global install first, then:
-codex-transfer -d -k
+## 支持的厂商
 
-# Output:
-# codex-transfer started in background (PID: 12345)
-# Log file: ~/.codex-transfer/logs/codex-transfer.log
-# PID file: ~/.codex-transfer/logs/codex-transfer.pid
-# Stop:   kill $(cat ~/.codex-transfer/logs/codex-transfer.pid)
+任意实现 OpenAI Chat Completions API 格式的厂商均可使用。
 
-# View logs
-tail -f ~/.codex-transfer/logs/codex-transfer.log
+| 厂商 | 基础 URL |
+|------|----------|
+| DeepSeek | `https://api.deepseek.com/v1` |
+| 小米 MiMo | `https://api.xiaomimimo.com/v1` |
+| Kimi (Moonshot) | `https://api.moonshot.cn/v1` |
+| Qwen (通义千问) | `https://dashscope.aliyuncs.com/compatible-mode/v1` |
+| OpenRouter | `https://openrouter.ai/api/v1` |
 
-# Stop
-kill $(cat ~/.codex-transfer/logs/codex-transfer.pid)
+> 任何 OpenAI API 兼容的厂商理论上均可正常工作。如果发现未列出的可用厂商，欢迎提交 PR。
+
+---
+
+## Codex CLI 配置
+
+在 `~/.codex/config.toml` 中添加：
+
+```toml
+model = "deepseek-v4-pro"
+model_provider = "deepseek-transfer"
+
+[model_providers.deepseek-transfer]
+name = "DeepSeek"
+base_url = "http://127.0.0.1:4446/v1"
+wire_api = "responses"
 ```
 
-### Build from source
+> **注意**：`base_url` 端口需与 `codex-transfer` 监听端口一致，`wire_api` 必须为 `"responses"`。
+
+---
+
+## 项目结构
+
+```
+src/
+├── cli.ts         CLI 入口 — 参数解析、daemon 进程管理、日志轮转
+├── server.ts      HTTP 服务 — Hono 路由注册、请求调度、创建代理实例
+├── config.ts      配置管理 — 多来源合并、优先级控制、配置文件搜索
+├── session.ts     会话状态 — 消息历史存储、推理内容双索引缓存
+├── translate.ts   协议翻译 — Responses ↔ Chat Completions 双向转换
+├── stream.ts      SSE 翻译 — 流式 chunk 解析、事件序列生成、错误兜底
+└── types.ts       类型定义 — 两套 API 的完整 TypeScript 类型
+build.mjs          构建脚本 — esbuild 打包为单文件
+```
+
+### 依赖关系
+
+```
+cli.ts → server.ts → translate.ts + stream.ts → session.ts + types.ts
+                  → config.ts
+```
+
+### 数据流
+
+```
+                    ┌─────────────┐
+                    │   Config    │ ◄── CLI / ENV / File
+                    └──────┬──────┘
+                           │
+  Codex ──POST──► Server ──┼──► toChatRequest() ──► fetch ──► Upstream
+    ▲              │       │                                    │
+    │              │   SessionStore                             │
+    └──SSE/JSON────┘   (history +                               │
+                        reasoning)  ◄── translateStream() ──────┘
+                                    ◄── fromChatResponse()
+```
+
+---
+
+## 构建
 
 ```bash
 git clone https://github.com/Icicno/codex-transfer.git
 cd codex-transfer
 npm install
-npm run build
-
-# Run directly
+npm run build        # esbuild 打包 + tsc 类型检查
 node dist/codex-transfer.mjs -k
 
-# Or link as global command
+# 或链接为全局命令
 npm link
 codex-transfer -k
 ```
 
-### As a library (from source only)
+---
 
-> **Note:** The npm package contains only the CLI bundle. To use as a library, clone the repo and import from source.
+## 程序化使用
 
 ```typescript
 import { createTransfer } from "./src/server.js";
@@ -161,63 +336,7 @@ const { app, port } = createTransfer({
 });
 ```
 
-## Codex Configuration
-
-Add to `~/.codex/config.toml`:
-
-```toml
-model = "deepseek-v4-pro"
-model_provider = "deepseek-transfer"
-
-[model_providers.deepseek-transfer]
-name = "DeepSeek"
-base_url = "http://127.0.0.1:4446/v1"
-wire_api = "responses"
-```
-
-## Supported Providers
-
-Any provider that implements the OpenAI Chat Completions API format is supported. 
-
-| Provider | Base URL |
-|----------|----------|
-| DeepSeek | `https://api.deepseek.com/v1` |
-| Xiaomi MiMo | `https://api.xiaomimimo.com/v1` |
-| Kimi (Moonshot) | `https://api.moonshot.cn/v1` |
-| Qwen | `https://dashscope.aliyuncs.com/compatible-mode/v1` |
-| Mistral | `https://api.mistral.ai/v1` |
-| Groq | `https://api.groq.com/openai/v1` |
-| xAI | `https://api.x.ai/v1` |
-| OpenRouter | `https://openrouter.ai/api/v1` |
-
-> **Note:** Any OpenAI API-compatible provider should work. If you find a working provider not listed here, feel free to open a PR.
-
-## Features
-
-- **Single-file bundle** — `dist/codex-transfer.mjs` has zero runtime dependencies
-- **Streaming** — full SSE streaming with correct event sequencing
-- **Tool calls** — accumulates streaming deltas and emits structured function_call items
-- **Parallel tool calls** — consecutive function_call input items merged into one assistant message
-- **Tool call message ordering** — automatically reorders messages to ensure `assistant(tool_calls)` is immediately followed by matching `tool` messages (required by DeepSeek and other strict providers)
-- **Model name mapping** — maps non-standard Codex model names (e.g. `codex-auto-review`) to upstream provider models via `modelMap` config or `--model` flag
-- **Reasoning models** — preserves `reasoning_content` across turns (DeepSeek, kimi-k2.6)
-- **Model catalog** — proxies `/v1/models` from the upstream provider
-- **Health check** — `GET /health` diagnostic endpoint
-- **TLS skip** — supports corporate proxy / self-signed certificate scenarios
-- **Daemon mode** — `--daemon` runs in background with logs to `logs/` directory next to config file
-
-## Project Structure
-
-| File | Description |
-|------|-------------|
-| `src/types.ts` | Responses/Chat Completions API type definitions |
-| `src/config.ts` | Configuration loading (file + env vars) |
-| `src/session.ts` | Session store and reasoning content cache |
-| `src/translate.ts` | Request/response translation logic |
-| `src/stream.ts` | SSE stream translation |
-| `src/server.ts` | HTTP server (Hono) |
-| `src/cli.ts` | CLI entry point |
-| `build.mjs` | esbuild bundler script |
+---
 
 ## License
 
