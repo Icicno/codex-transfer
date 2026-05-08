@@ -1,5 +1,5 @@
 import { randomUUID } from "node:crypto";
-import type { ChatMessage, ChatRequest, ChatStreamChunk } from "./types.js";
+import type { ChatMessage, ChatRequest, ChatStreamChunk, ChatUsage } from "./types.js";
 import type { SessionStore } from "./session.js";
 
 export interface StreamArgs {
@@ -112,6 +112,7 @@ export async function* translateStream(
     const toolCalls = new Map<number, ToolCallAccum>();
     let emittedMessageItem = false;
     let done = false;
+    let streamUsage: ChatUsage | undefined;
 
     const reader = upstream.body.getReader();
     const decoder = new TextDecoder();
@@ -168,6 +169,11 @@ export async function* translateStream(
               const err = (chunk as unknown as Record<string, unknown>).error;
               if (err) {
                 console.error(`[transfer] upstream error in stream:`, err);
+              }
+
+              // Capture usage from upstream (usually in the final chunk)
+              if (chunk.usage) {
+                streamUsage = chunk.usage;
               }
 
               for (const choice of chunk.choices ?? []) {
@@ -364,7 +370,13 @@ export async function* translateStream(
         status: "completed",
         model,
         output: outputItems,
-        usage: { input_tokens: 0, output_tokens: 0, total_tokens: 0 },
+        usage: streamUsage
+          ? {
+              input_tokens: streamUsage.prompt_tokens,
+              output_tokens: streamUsage.completion_tokens,
+              total_tokens: streamUsage.total_tokens,
+            }
+          : { input_tokens: 0, output_tokens: 0, total_tokens: 0 },
       },
     });
 
