@@ -194,6 +194,20 @@ Codex CLI relies on the usage fields in Responses API to calculate context windo
 
 Both non-streaming and streaming paths share the same mapping logic.
 
+### Reasoning Effort Mapping
+
+Codex CLI controls model reasoning intensity via `reasoning.effort` (none/low/medium/high/xhigh), but providers implement this differently. `codex-transfer` automatically maps the Responses API reasoning effort to provider-specific parameters:
+
+| Codex Level | Responses API Value | DeepSeek | MiMo / Kimi / GLM |
+|---|---|---|---|
+| Minimal | `none` | `thinking: {type: "disabled"}` | `thinking: {type: "disabled"}` |
+| Low | `low` | `thinking: {type: "enabled"}, reasoning_effort: "high"` | `thinking: {type: "enabled"}` |
+| Medium | `medium` | `thinking: {type: "enabled"}, reasoning_effort: "high"` | `thinking: {type: "enabled"}` |
+| High | `high` | `thinking: {type: "enabled"}, reasoning_effort: "high"` | `thinking: {type: "enabled"}` |
+| Ultra | `xhigh` | `thinking: {type: "enabled"}, reasoning_effort: "max"` | `thinking: {type: "enabled"}` |
+
+**Compatibility strategy**: Both `thinking` and `reasoning_effort` are sent to all providers. Providers that don't support `reasoning_effort` will ignore it; if a provider returns a 400 error, `codex-transfer` automatically strips `reasoning_effort` and retries.
+
 ### Session Management
 
 Codex CLI uses `previous_response_id` for multi-turn conversations. `SessionStore` maintains the full message history for each session in memory, making every Chat Completions call **self-contained** (no dependency on upstream context caching).

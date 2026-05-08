@@ -166,6 +166,18 @@ export function createTransfer(options: TransferOptions = {}) {
           headers,
           body: JSON.stringify(chatReq),
         });
+
+        // Approach C: if upstream rejects reasoning_effort (400), retry without it
+        if (!resp.ok && resp.status === 400 && chatReq.reasoning_effort) {
+          const errBody = await resp.text().catch(() => "");
+          console.warn(`[transfer] upstream rejected reasoning_effort, retrying without it: ${errBody.slice(0, 200)}`);
+          const { reasoning_effort: _, ...stripped } = chatReq;
+          resp = await fetch(url, {
+            method: "POST",
+            headers,
+            body: JSON.stringify(stripped),
+          });
+        }
       } catch (e) {
         const msg = e instanceof Error ? e.message : String(e);
         console.error(`upstream error: ${msg}`);

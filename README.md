@@ -194,6 +194,20 @@ Codex CLI 依赖 Responses API 中的 usage 字段计算上下文占用率。`co
 
 非流式和流式路径共享同一套映射逻辑。
 
+### 推理强度映射（Reasoning Effort）
+
+Codex CLI 通过 `reasoning.effort` 控制模型推理强度（极低/低/中/高/超高），但各厂商的实现方式不同。`codex-transfer` 自动将 Responses API 的推理强度映射为各厂商可识别的参数：
+
+| Codex 等级 | Responses API 值 | DeepSeek | MiMo / Kimi / GLM |
+|---|---|---|---|
+| 极低 | `none` | `thinking: {type: "disabled"}` | `thinking: {type: "disabled"}` |
+| 低 | `low` | `thinking: {type: "enabled"}, reasoning_effort: "high"` | `thinking: {type: "enabled"}` |
+| 中 | `medium` | `thinking: {type: "enabled"}, reasoning_effort: "high"` | `thinking: {type: "enabled"}` |
+| 高 | `high` | `thinking: {type: "enabled"}, reasoning_effort: "high"` | `thinking: {type: "enabled"}` |
+| 超高 | `xhigh` | `thinking: {type: "enabled"}, reasoning_effort: "max"` | `thinking: {type: "enabled"}` |
+
+**兼容策略**：同时向所有厂商发送 `thinking` 和 `reasoning_effort` 参数。不支持 `reasoning_effort` 的厂商会忽略该字段；如果厂商返回 400 错误，`codex-transfer` 会自动去掉 `reasoning_effort` 重试。
+
 ### 会话管理
 
 Codex CLI 通过 `previous_response_id` 实现多轮对话。`SessionStore` 在内存中维护每个会话的完整消息历史，使得每次 Chat Completions 调用都是**自包含**的（无需依赖上游的上下文缓存）。

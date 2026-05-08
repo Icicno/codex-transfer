@@ -125,6 +125,9 @@ export function toChatRequest(
   // which violates Chat Completions strict ordering requirement.
   const reordered = reorderForToolCalls(messages);
 
+  // Map Responses API reasoning.effort → Chat Completions thinking + reasoning_effort
+  const reasoningFields = mapReasoningEffort(req.reasoning?.effort);
+
   return {
     model: req.model,
     messages: reordered,
@@ -132,7 +135,60 @@ export function toChatRequest(
     ...(req.temperature != null ? { temperature: req.temperature } : {}),
     ...(req.max_output_tokens != null ? { max_tokens: req.max_output_tokens } : {}),
     stream: req.stream ?? false,
+    ...reasoningFields,
   };
+}
+
+/**
+ * Responses API tool format → Chat Completions tool format.
+ *
+ * Responses API (flat):
+ *   {"type":"function","name":"foo","description":"...","parameters":{...},"strict":false}
+ *
+ * Chat Completions (nested):
+ *   {"type":"function","function":{"name":"foo","description":"...","parameters":{...}}}
+ */
+/**
+ * Map Responses API reasoning.effort → Chat Completions thinking + reasoning_effort.
+ *
+ * Mapping strategy (approach C: send optimistically, retry on rejection):
+ * - "none"    → thinking disabled, no reasoning_effort
+ * - other     → thinking enabled + reasoning_effort
+ *   - DeepSeek supports reasoning_effort: "high" / "max"
+ *   - MiMo / Kimi / GLM only support thinking on/off, ignore reasoning_effort
+ *
+ * We send both `thinking` and `reasoning_effort` to all providers.
+ * If a provider rejects `reasoning_effort`, the caller strips it and retries.
+ */
+export function mapReasoningEffort(
+  effort: string | undefined
+): { thinking?: { type: "enabled" | "disabled" }; reasoning_effort?: string } {
+  if (!effort) return {};
+
+  if (effort === "none") {
+    return { thinking: { type: "disabled" } };
+  }
+
+  // Map effort levels to DeepSeek's two-tier scheme:
+  //   minimal/low/medium/high → "high"
+  //   xhigh → "max"
+  const reasoningEffort = effort === "xhigh" ? "max" : "high";
+
+  return {
+    thinking: { type: "enabled" },
+    reasoning_effort: reasoningEffort,
+  };
+}
+
+/**
+ * Strip reasoning_effort from a ChatRequest for retry.
+ * Returns a shallow copy with reasoning_effort removed.
+ */
+export function stripReasoningEffort(
+  req: ChatRequest
+): ChatRequest {
+  const { reasoning_effort: _, ...rest } = req;
+  return rest;
 }
 
 /**

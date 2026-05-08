@@ -11,6 +11,8 @@ export interface ResponsesRequest {
   /** Responses API system prompt field (some clients use `system`, others `instructions`) */
   system?: string;
   instructions?: string;
+  /** Reasoning effort control — Codex CLI sends this as `reasoning.effort` */
+  reasoning?: { effort?: string };
 }
 
 export type ResponsesInput = string | ResponsesInputItem[];
@@ -62,6 +64,10 @@ export interface ChatRequest {
   temperature?: number;
   max_tokens?: number;
   stream: boolean;
+  /** DeepSeek: reasoning effort level ("high" | "max") */
+  reasoning_effort?: string;
+  /** DeepSeek / MiMo / Kimi / GLM: thinking mode toggle */
+  thinking?: { type: "enabled" | "disabled" };
 }
 
 export interface ChatMessage {

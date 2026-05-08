@@ -85,6 +85,19 @@ export async function* translateStream(
         body: JSON.stringify(chatReq),
         signal,
       });
+
+      // Approach C: if upstream rejects reasoning_effort (400), retry without it
+      if (!upstream.ok && upstream.status === 400 && chatReq.reasoning_effort) {
+        const errBody = await upstream.text().catch(() => "");
+        console.warn(`[transfer] upstream rejected reasoning_effort, retrying without it: ${errBody.slice(0, 200)}`);
+        const { reasoning_effort: _, ...stripped } = chatReq;
+        upstream = await fetch(url, {
+          method: "POST",
+          headers,
+          body: JSON.stringify(stripped),
+          signal,
+        });
+      }
   } catch (e) {
     if (signal?.aborted) return;
     const msg = e instanceof Error ? e.message : String(e);
