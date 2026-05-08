@@ -375,6 +375,11 @@ const { app, port } = createTransfer({
 
 ## 更新日志
 
+### v0.3.3 (2026-05-09)
+
+- **非流式工具调用支持**：`fromChatResponse()` 现在正确处理 `tool_calls`，生成 `function_call` 输出项（此前非流式路径完全忽略工具调用）
+- **流式 arguments 增量推送**：函数调用的 `response.output_item.added` 和 `response.function_call_arguments.delta` 事件在流式过程中实时发出，而非流结束后一次性发送
+
 ### v0.3.0 (2026-05-08)
 
 - **Token 用量**：从上游流式响应中提取 usage，Codex 可正确显示上下文占用率（修复 0% 问题）

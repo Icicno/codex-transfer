@@ -41,10 +41,23 @@ export interface ResponsesResponse {
   usage: ResponsesUsage;
 }
 
-export interface ResponsesOutputItem {
-  type: string;
+/** Output item in a Responses API response — message or function_call. */
+export type ResponsesOutputItem = ResponsesMessageOutput | ResponsesFunctionCallOutput;
+
+export interface ResponsesMessageOutput {
+  type: "message";
   role: string;
   content: ContentPart[];
+  status?: string;
+}
+
+export interface ResponsesFunctionCallOutput {
+  type: "function_call";
+  id: string;
+  call_id: string;
+  name: string;
+  arguments: string;
+  status: "completed" | "in_progress";
 }
 
 export interface ResponsesUsage {

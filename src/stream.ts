@@ -19,6 +19,10 @@ interface ToolCallAccum {
   id: string;
   name: string;
   arguments: string;
+  /** Pre-allocated function_call item ID for incremental emission */
+  fcItemId: string;
+  /** Whether response.output_item.added has been yielded */
+  emittedAdded: boolean;
 }
 
 /**
@@ -28,9 +32,10 @@ interface ToolCallAccum {
  *   response.created → response.output_item.added (message) → response.output_text.delta*
  *   → response.output_item.done → response.completed
  *
- * Tool call response event sequence:
- *   response.created → [accumulate deltas] → response.output_item.added (function_call)
- *   → response.function_call_arguments.delta → response.output_item.done → response.completed
+ * Tool call response event sequence (incremental):
+ *   response.created → response.output_item.added (function_call, when id+name available)
+ *   → response.function_call_arguments.delta* (real-time)
+ *   → response.output_item.done (function_call) → response.completed
  */
 export async function* translateStream(
   args: StreamArgs,
@@ -211,19 +216,55 @@ export async function* translateStream(
                   });
                 }
 
-                // Tool call deltas — accumulate by index
+                // Tool call deltas — accumulate by index and emit incrementally
                 const deltaCalls = choice.delta?.tool_calls;
                 if (deltaCalls) {
                   for (const dc of deltaCalls) {
                     let entry = toolCalls.get(dc.index);
                     if (!entry) {
-                      entry = { id: "", name: "", arguments: "" };
+                      entry = {
+                        id: "",
+                        name: "",
+                        arguments: "",
+                        fcItemId: `fc_${randomUUID().replace(/-/g, "")}`,
+                        emittedAdded: false,
+                      };
                       toolCalls.set(dc.index, entry);
                     }
                     if (dc.id) entry.id = dc.id;
                     if (dc.function?.name) entry.name += dc.function.name;
-                    if (dc.function?.arguments)
+
+                    // Once we have id + name, emit response.output_item.added
+                    if (!entry.emittedAdded && entry.id && entry.name) {
+                      const fcOutputIndex = (emittedMessageItem ? 1 : 0) + dc.index;
+                      yield formatSSE("response.output_item.added", {
+                        type: "response.output_item.added",
+                        output_index: fcOutputIndex,
+                        item: {
+                          type: "function_call",
+                          id: entry.fcItemId,
+                          call_id: entry.id,
+                          name: entry.name,
+                          arguments: "",
+                          status: "in_progress",
+                        },
+                      });
+                      entry.emittedAdded = true;
+                    }
+
+                    // Emit arguments delta in real time
+                    if (dc.function?.arguments) {
                       entry.arguments += dc.function.arguments;
+                      if (entry.emittedAdded) {
+                        const fcOutputIndex = (emittedMessageItem ? 1 : 0) + dc.index;
+                        yield formatSSE("response.function_call_arguments.delta", {
+                          type: "response.function_call_arguments.delta",
+                          item_id: entry.fcItemId,
+                          output_index: fcOutputIndex,
+                          delta: dc.function.arguments,
+                        });
+                      }
+                    }
                   }
                 }
 
@@ -262,53 +303,50 @@ export async function* translateStream(
       });
     }
 
-    // Emit function_call items for each accumulated tool call
+    // Emit response.output_item.done for each accumulated tool call.
+    // added + delta events were already emitted during streaming.
     const baseIndex = emittedMessageItem ? 1 : 0;
     const fcItems: Record<string, unknown>[] = [];
 
     let relIdx = 0;
     for (const [, tc] of toolCalls) {
-      const fcItemId = `fc_${randomUUID().replace(/-/g, "")}`;
       const outputIndex = baseIndex + relIdx;
 
-      yield formatSSE("response.output_item.added", {
-        type: "response.output_item.added",
-        output_index: outputIndex,
-        item: {
-          type: "function_call",
-          id: fcItemId,
-          call_id: tc.id,
-          name: tc.name,
-          arguments: "",
-          status: "in_progress",
-        },
-      });
-
-      if (tc.arguments) {
-        yield formatSSE("response.function_call_arguments.delta", {
-          type: "response.function_call_arguments.delta",
-          item_id: fcItemId,
+      // Fallback: if added was never emitted (missing id/name), emit it now
+      if (!tc.emittedAdded && tc.id && tc.name) {
+        yield formatSSE("response.output_item.added", {
+          type: "response.output_item.added",
           output_index: outputIndex,
-          delta: tc.arguments,
+          item: {
+            type: "function_call",
+            id: tc.fcItemId,
+            call_id: tc.id,
+            name: tc.name,
+            arguments: "",
+            status: "in_progress",
+          },
+        });
+        tc.emittedAdded = true;
+      }
+
+      if (tc.emittedAdded) {
+        yield formatSSE("response.output_item.done", {
+          type: "response.output_item.done",
+          output_index: outputIndex,
+          item: {
+            type: "function_call",
+            id: tc.fcItemId,
+            call_id: tc.id,
+            name: tc.name,
+            arguments: tc.arguments,
+            status: "completed",
+          },
         });
       }
 
-      yield formatSSE("response.output_item.done", {
-        type: "response.output_item.done",
-        output_index: outputIndex,
-        item: {
-          type: "function_call",
-          id: fcItemId,
-          call_id: tc.id,
-          name: tc.name,
-          arguments: tc.arguments,
-          status: "completed",
-        },
-      });
-
       fcItems.push({
         type: "function_call",
-        id: fcItemId,
+        id: tc.fcItemId,
         call_id: tc.id,
         name: tc.name,
         arguments: tc.arguments,

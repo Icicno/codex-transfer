@@ -1,3 +1,4 @@
+import { randomUUID } from "node:crypto";
 import type {
   ResponsesRequest,
   ResponsesInputItem,
@@ -6,6 +7,7 @@ import type {
   ChatResponse,
   ResponsesResponse,
   ResponsesOutputItem,
+  ResponsesFunctionCallOutput,
   ContentPart,
   ResponsesUsage,
   ChatUsage,
@@ -219,6 +221,10 @@ function convertTool(tool: Record<string, unknown>): Record<string, unknown> {
 
 /**
  * Convert a Chat Completions response into a Responses API response.
+ *
+ * Handles both text-only and tool_call responses.
+ * Each tool_call in the Chat Completions response is converted to a
+ * `function_call` output item in the Responses API response.
  */
 export function fromChatResponse(
   id: string,
@@ -236,13 +242,39 @@ export function fromChatResponse(
     total_tokens: 0,
   };
 
-  const output: ResponsesOutputItem[] = [
-    {
+  const output: ResponsesOutputItem[] = [];
+
+  // 1. Text content (if any)
+  if (text) {
+    output.push({
       type: "message",
       role: "assistant",
       content: [{ type: "output_text", text }],
-    },
-  ];
+    });
+  }
+
+  // 2. Tool calls (if any)
+  for (const tc of choice.message.tool_calls ?? []) {
+    const tcRecord = tc as Record<string, unknown>;
+    const func = tcRecord.function as Record<string, unknown> | undefined;
+    output.push({
+      type: "function_call",
+      id: `fc_${randomUUID().replace(/-/g, "")}`,
+      call_id: (tcRecord.id as string) ?? "",
+      name: (func?.name as string) ?? "",
+      arguments: (func?.arguments as string) ?? "{}",
+      status: "completed",
+    });
+  }
+
+  // 3. Fallback: empty message if neither text nor tool_calls
+  if (output.length === 0) {
+    output.push({
+      type: "message",
+      role: "assistant",
+      content: [{ type: "output_text", text: "" }],
+    });
+  }
 
   const respUsage = mapUsage(usage);
 

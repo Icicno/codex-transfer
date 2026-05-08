@@ -375,6 +375,11 @@ const { app, port } = createTransfer({
 
 ## Changelog
 
+### v0.3.3 (2026-05-09)
+
+- **Non-streaming tool call support**: `fromChatResponse()` now correctly handles `tool_calls`, generating `function_call` output items (previously the non-streaming path ignored tool calls entirely)
+- **Streaming arguments incremental delivery**: `response.output_item.added` and `response.function_call_arguments.delta` events are now emitted in real time during streaming, instead of being sent in batch after stream completion
+
 ### v0.3.0 (2026-05-08)
 
 - **Token usage**: Extract usage from upstream streaming responses — Codex now correctly displays context utilization (fixes 0% display issue)
