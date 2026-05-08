@@ -8,6 +8,7 @@ import type {
   ResponsesOutputItem,
   ContentPart,
   ResponsesUsage,
+  ChatUsage,
 } from "./types.js";
 import type { SessionStore } from "./session.js";
 
@@ -187,11 +188,7 @@ export function fromChatResponse(
     },
   ];
 
-  const respUsage: ResponsesUsage = {
-    input_tokens: usage.prompt_tokens,
-    output_tokens: usage.completion_tokens,
-    total_tokens: usage.total_tokens,
-  };
+  const respUsage = mapUsage(usage);
 
   const response: ResponsesResponse = {
     id,
@@ -202,6 +199,38 @@ export function fromChatResponse(
   };
 
   return { response, assistantMessage: choice.message };
+}
+
+/**
+ * Map upstream Chat Completions usage to Responses API usage.
+ *
+ * Handles two upstream formats:
+ * - OpenAI standard: `prompt_tokens_details.cached_tokens`
+ * - DeepSeek:        `prompt_cache_hit_tokens` (top-level)
+ *
+ * `reasoning_tokens` uses the same nested path in both formats.
+ */
+export function mapUsage(usage: ChatUsage): ResponsesUsage {
+  const cachedTokens =
+    usage.prompt_tokens_details?.cached_tokens ??
+    usage.prompt_cache_hit_tokens;
+
+  const reasoningTokens = usage.completion_tokens_details?.reasoning_tokens;
+
+  const result: ResponsesUsage = {
+    input_tokens: usage.prompt_tokens,
+    output_tokens: usage.completion_tokens,
+    total_tokens: usage.total_tokens,
+  };
+
+  if (cachedTokens != null) {
+    result.input_tokens_details = { cached_tokens: cachedTokens };
+  }
+  if (reasoningTokens != null) {
+    result.output_tokens_details = { reasoning_tokens: reasoningTokens };
+  }
+
+  return result;
 }
 
 /**

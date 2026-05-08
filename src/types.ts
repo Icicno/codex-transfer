@@ -88,6 +88,12 @@ export interface ChatUsage {
   prompt_tokens: number;
   completion_tokens: number;
   total_tokens: number;
+  /** OpenAI standard format: nested detail fields */
+  prompt_tokens_details?: { cached_tokens?: number };
+  completion_tokens_details?: { reasoning_tokens?: number };
+  /** DeepSeek format: top-level cache fields */
+  prompt_cache_hit_tokens?: number;
+  prompt_cache_miss_tokens?: number;
 }
 
 // ── SSE streaming types ───────────────────────────────────────────────────────

@@ -1,6 +1,7 @@
 import { randomUUID } from "node:crypto";
 import type { ChatMessage, ChatRequest, ChatStreamChunk, ChatUsage } from "./types.js";
 import type { SessionStore } from "./session.js";
+import { mapUsage } from "./translate.js";
 
 export interface StreamArgs {
   url: string;
@@ -371,11 +372,7 @@ export async function* translateStream(
         model,
         output: outputItems,
         usage: streamUsage
-          ? {
-              input_tokens: streamUsage.prompt_tokens,
-              output_tokens: streamUsage.completion_tokens,
-              total_tokens: streamUsage.total_tokens,
-            }
+          ? mapUsage(streamUsage)
           : { input_tokens: 0, output_tokens: 0, total_tokens: 0 },
       },
     });
