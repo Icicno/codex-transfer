@@ -6,6 +6,9 @@ dist/
 # ide
 .vscode/
 
+# docs
+docs/
+
 # os
 .DS_Store
 Thumbs.db
