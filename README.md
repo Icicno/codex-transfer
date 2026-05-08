@@ -178,6 +178,22 @@ response.created
 - 文本 delta 实时透传，工具调用 delta 在流结束后批量封装（因 Chat Completions 的 tool call 按 index 散落在多个 chunk 中）
 - 顶层异常兜底：即使上游异常断开，也会产出 `response.failed` 事件，确保 Codex CLI 不会挂起等待
 
+### Token 用量详情
+
+Codex CLI 依赖 Responses API 中的 usage 字段计算上下文占用率。`codex-transfer` 自动提取上游响应中的用量信息并映射到 Responses API 格式，同时兼容 OpenAI 和 DeepSeek 两种上游格式差异：
+
+| Responses API 输出 | OpenAI 上游字段 | DeepSeek 上游字段 |
+|---|---|---|
+| `input_tokens` | `prompt_tokens` | `prompt_tokens` |
+| `output_tokens` | `completion_tokens` | `completion_tokens` |
+| `total_tokens` | `total_tokens` | `total_tokens` |
+| `input_tokens_details.cached_tokens` | `prompt_tokens_details.cached_tokens` | `prompt_cache_hit_tokens` |
+| `output_tokens_details.reasoning_tokens` | `completion_tokens_details.reasoning_tokens` | `completion_tokens_details.reasoning_tokens` |
+
+**自动格式检测**：根据上游响应中实际存在的字段自动判断格式，无需配置。`cached_tokens` 优先取 OpenAI 嵌套字段，无则取 DeepSeek 顶层字段；`reasoning_tokens` 两者路径一致直接取值。字段不存在时不会输出对应的 `details` 对象。
+
+非流式和流式路径共享同一套映射逻辑。
+
 ### 会话管理
 
 Codex CLI 通过 `previous_response_id` 实现多轮对话。`SessionStore` 在内存中维护每个会话的完整消息历史，使得每次 Chat Completions 调用都是**自包含**的（无需依赖上游的上下文缓存）。

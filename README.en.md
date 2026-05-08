@@ -178,6 +178,22 @@ response.created
 - Text deltas are forwarded in real time; tool call deltas are batched after stream completion (Chat Completions scatters tool calls across multiple chunks by index)
 - Top-level error fallback: even if upstream disconnects unexpectedly, a `response.failed` event is emitted, preventing Codex CLI from hanging
 
+### Token Usage Details
+
+Codex CLI relies on the usage fields in Responses API to calculate context window utilization. `codex-transfer` automatically extracts token usage from upstream responses and maps them to the Responses API format, handling differences between OpenAI and DeepSeek upstream formats:
+
+| Responses API Output | OpenAI Upstream Field | DeepSeek Upstream Field |
+|---|---|---|
+| `input_tokens` | `prompt_tokens` | `prompt_tokens` |
+| `output_tokens` | `completion_tokens` | `completion_tokens` |
+| `total_tokens` | `total_tokens` | `total_tokens` |
+| `input_tokens_details.cached_tokens` | `prompt_tokens_details.cached_tokens` | `prompt_cache_hit_tokens` |
+| `output_tokens_details.reasoning_tokens` | `completion_tokens_details.reasoning_tokens` | `completion_tokens_details.reasoning_tokens` |
+
+**Auto-detection**: The upstream format is automatically detected based on which fields are present in the response — no configuration needed. `cached_tokens` prefers the OpenAI nested field, falling back to the DeepSeek top-level field; `reasoning_tokens` uses the same path in both formats. Detail objects are omitted when the corresponding fields are absent.
+
+Both non-streaming and streaming paths share the same mapping logic.
+
 ### Session Management
 
 Codex CLI uses `previous_response_id` for multi-turn conversations. `SessionStore` maintains the full message history for each session in memory, making every Chat Completions call **self-contained** (no dependency on upstream context caching).
