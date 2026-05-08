@@ -9,6 +9,9 @@ export interface Config {
   insecure: boolean;
   /** Model name mapping: { "codex-auto-review": "deepseek-v4-pro", "*": "deepseek-v4-pro" } */
   modelMap: Record<string, string>;
+  /** Whether to send reasoning_effort to upstream (default: true).
+   *  Set to false if the upstream rejects this field. The thinking toggle is always sent. */
+  reasoningEffort: boolean;
 }
 
 const DEFAULT_CONFIG: Config = {
@@ -17,6 +20,7 @@ const DEFAULT_CONFIG: Config = {
   apiKey: "",
   insecure: false,
   modelMap: {},
+  reasoningEffort: true,
 };
 
 /**
@@ -41,6 +45,9 @@ export function loadConfig(configPath?: string): Config {
       process.env.CODEX_TRANSFER_INSECURE ?? fileConfig.insecure
     ),
     modelMap: fileConfig.modelMap ?? DEFAULT_CONFIG.modelMap,
+    reasoningEffort: parseBool(
+      process.env.CODEX_TRANSFER_REASONING_EFFORT ?? fileConfig.reasoningEffort ?? true
+    ),
   };
 }
 
@@ -50,6 +57,7 @@ interface FileConfig {
   apiKey?: string;
   insecure?: boolean;
   modelMap?: Record<string, string>;
+  reasoningEffort?: boolean;
 }
 
 /**
@@ -89,6 +97,7 @@ function loadConfigFile(explicitPath?: string): FileConfig {
           modelMap: typeof parsed.modelMap === "object" && parsed.modelMap !== null
             ? parsed.modelMap as Record<string, string>
             : undefined,
+          reasoningEffort: typeof parsed.reasoningEffort === "boolean" ? parsed.reasoningEffort : undefined,
         };
       } catch {
         // Ignore parse errors, continue to next path

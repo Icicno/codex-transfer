@@ -46,6 +46,7 @@ Options:
   -m, --model MODEL      Force override model name (highest priority)
   -c, --config PATH      Path to config file (JSON)
   -k, --insecure         Skip TLS certificate verification
+      --no-reasoning-effort  Don't send reasoning_effort to upstream
   -d, --daemon           Run in background, logs to logs/ directory
   -h, --help             Show this help
 ```
@@ -88,6 +89,7 @@ Create a JSON config file at one of these locations (searched in order):
   "upstream": "https://api.deepseek.com/v1",
   "apiKey": "sk-your-key-here",
   "insecure": false,
+  "reasoningEffort": true,
   "modelMap": {
     "*": "deepseek-v4-pro",
     "codex-auto-review": "deepseek-v4-pro"
@@ -104,6 +106,7 @@ Create a JSON config file at one of these locations (searched in order):
 | `CODEX_TRANSFER_API_KEY` | _(empty)_ | API key forwarded to upstream |
 | `CODEX_TRANSFER_CONFIG` | _(auto)_ | Path to config file |
 | `CODEX_TRANSFER_INSECURE` | `false` | Set to `"1"` or `"true"` to skip TLS verification |
+| `CODEX_TRANSFER_REASONING_EFFORT` | `true` | Set to `"0"` or `"false"` to disable sending reasoning_effort |
 
 ### Model Name Mapping
 
@@ -206,7 +209,7 @@ Codex CLI controls model reasoning intensity via `reasoning.effort` (none/low/me
 | High | `high` | `thinking: {type: "enabled"}, reasoning_effort: "high"` | `thinking: {type: "enabled"}` |
 | Ultra | `xhigh` | `thinking: {type: "enabled"}, reasoning_effort: "max"` | `thinking: {type: "enabled"}` |
 
-**Compatibility strategy**: Both `thinking` and `reasoning_effort` are sent to all providers. Providers that don't support `reasoning_effort` will ignore it; if a provider returns a 400 error, `codex-transfer` automatically strips `reasoning_effort` and retries.
+**Compatibility strategy**: The `thinking` toggle is always sent (supported by all providers). `reasoning_effort` is sent by default (natively supported by DeepSeek); if the upstream doesn't support this field, it can be disabled via the `--no-reasoning-effort` CLI flag or `"reasoningEffort": false` in the config file.
 
 ### Session Management
 
