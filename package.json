@@ -1,6 +1,6 @@
 {
   "name": "@classicicn/codex-transfer",
-  "version": "0.3.0",
+  "version": "0.3.1",
   "description": "Responses API ↔ Chat Completions translation bridge for Codex — use DeepSeek, Kimi, Qwen, and other providers with Codex",
   "type": "module",
   "main": "dist/codex-transfer.mjs",
