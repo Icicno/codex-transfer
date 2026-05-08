@@ -48,7 +48,7 @@ Options:
   -m, --model MODEL      Force override model name (highest priority)
   -c, --config PATH      Path to config file (JSON)
   -k, --insecure         Skip TLS certificate verification
-      --no-reasoning-effort  Don't send reasoning_effort to upstream
+      --reasoning-effort   Send reasoning effort to upstream (default: off)
   -d, --daemon           Run in background, logs to logs/ directory
   -h, --help             Show this help
 ```
@@ -91,7 +91,7 @@ Create a JSON config file at one of these locations (searched in order):
   "upstream": "https://api.deepseek.com/v1",
   "apiKey": "sk-your-key-here",
   "insecure": false,
-  "reasoningEffort": true,
+  "reasoningEffort": false,
   "modelMap": {
     "*": "deepseek-v4-pro",
     "codex-auto-review": "deepseek-v4-pro"
@@ -108,7 +108,7 @@ Create a JSON config file at one of these locations (searched in order):
 | `CODEX_TRANSFER_API_KEY` | _(empty)_ | API key forwarded to upstream |
 | `CODEX_TRANSFER_CONFIG` | _(auto)_ | Path to config file |
 | `CODEX_TRANSFER_INSECURE` | `false` | Set to `"1"` or `"true"` to skip TLS verification |
-| `CODEX_TRANSFER_REASONING_EFFORT` | `true` | Set to `"0"` or `"false"` to disable sending reasoning_effort |
+| `CODEX_TRANSFER_REASONING_EFFORT` | `false` | Set to `"1"` or `"true"` to enable sending reasoning_effort |
 
 ### Model Name Mapping
 
@@ -211,7 +211,7 @@ Codex CLI controls model reasoning intensity via `reasoning.effort` (none/low/me
 | High | `high` | `thinking: {type: "enabled"}, reasoning_effort: "high"` | `thinking: {type: "enabled"}` |
 | Ultra | `xhigh` | `thinking: {type: "enabled"}, reasoning_effort: "max"` | `thinking: {type: "enabled"}` |
 
-**Compatibility strategy**: The `thinking` toggle is always sent (supported by all providers). `reasoning_effort` is sent by default (natively supported by DeepSeek); if the upstream doesn't support this field, it can be disabled via the `--no-reasoning-effort` CLI flag or `"reasoningEffort": false` in the config file.
+**Compatibility strategy**: The `thinking` toggle is always sent (supported by all providers). `reasoning_effort` is not sent by default (to avoid 400 errors from incompatible providers); to enable it, use the `--reasoning-effort` CLI flag or `"reasoningEffort": true` in the config file.
 
 ### Session Management
 
@@ -380,7 +380,7 @@ const { app, port } = createTransfer({
 - **Token usage**: Extract usage from upstream streaming responses — Codex now correctly displays context utilization (fixes 0% display issue)
 - **Usage details**: Auto-map `cached_tokens` and `reasoning_tokens`, compatible with both OpenAI and DeepSeek upstream formats
 - **Reasoning effort**: Map `reasoning.effort` to DeepSeek `thinking`/`reasoning_effort` and MiMo/Kimi/GLM `thinking` toggle
-- **Config-driven control**: New `--no-reasoning-effort` / `reasoningEffort` option to strip reasoning effort parameters on demand
+- **Config-driven control**: `reasoning_effort` is off by default; enable via `--reasoning-effort` or `reasoningEffort` config option
 
 ### v0.2.0 (2026-05-07)
 

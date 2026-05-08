@@ -20,7 +20,7 @@ const DEFAULT_CONFIG: Config = {
   apiKey: "",
   insecure: false,
   modelMap: {},
-  reasoningEffort: true,
+  reasoningEffort: false,
 };
 
 /**
@@ -46,7 +46,7 @@ export function loadConfig(configPath?: string): Config {
     ),
     modelMap: fileConfig.modelMap ?? DEFAULT_CONFIG.modelMap,
     reasoningEffort: parseBool(
-      process.env.CODEX_TRANSFER_REASONING_EFFORT ?? fileConfig.reasoningEffort ?? true
+        process.env.CODEX_TRANSFER_REASONING_EFFORT ?? fileConfig.reasoningEffort ?? false
     ),
   };
 }

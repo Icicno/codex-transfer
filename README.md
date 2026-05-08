@@ -48,7 +48,7 @@ codex-transfer [options]
   -m, --model MODEL      强制覆盖模型名称（最高优先级）
   -c, --config PATH      配置文件路径（JSON 格式）
   -k, --insecure         跳过 TLS 证书验证（企业代理/自签证书场景）
-      --no-reasoning-effort  不向上传递 reasoning_effort 参数
+      --reasoning-effort   向上游传递 reasoning_effort 参数（默认关闭）
   -d, --daemon           后台运行，日志写入 logs/ 目录
   -h, --help             显示帮助信息
 ```
@@ -91,7 +91,7 @@ CLI 参数 > 环境变量 > 配置文件 > 默认值
   "upstream": "https://api.deepseek.com/v1",
   "apiKey": "sk-your-key-here",
   "insecure": false,
-  "reasoningEffort": true,
+  "reasoningEffort": false,
   "modelMap": {
     "*": "deepseek-v4-pro",
     "codex-auto-review": "deepseek-v4-pro"
@@ -108,7 +108,7 @@ CLI 参数 > 环境变量 > 配置文件 > 默认值
 | `CODEX_TRANSFER_API_KEY` | _(空)_ | 转发给上游的 API Key |
 | `CODEX_TRANSFER_CONFIG` | _(自动)_ | 配置文件路径 |
 | `CODEX_TRANSFER_INSECURE` | `false` | 设为 `"1"` 或 `"true"` 跳过 TLS 验证 |
-| `CODEX_TRANSFER_REASONING_EFFORT` | `true` | 设为 `"0"` 或 `"false"` 关闭 reasoning_effort 传递 |
+| `CODEX_TRANSFER_REASONING_EFFORT` | `false` | 设为 `"1"` 或 `"true"` 开启 reasoning_effort 传递 |
 
 ### 模型名称映射
 
@@ -211,7 +211,7 @@ Codex CLI 通过 `reasoning.effort` 控制模型推理强度（极低/低/中/�
 | 高 | `high` | `thinking: {type: "enabled"}, reasoning_effort: "high"` | `thinking: {type: "enabled"}` |
 | 超高 | `xhigh` | `thinking: {type: "enabled"}, reasoning_effort: "max"` | `thinking: {type: "enabled"}` |
 
-**兼容策略**：`thinking` 参数始终发送（所有厂商支持）。`reasoning_effort` 默认发送（DeepSeek 原生支持）；如果上游不支持该字段，可通过 `--no-reasoning-effort` CLI 参数或配置文件 `"reasoningEffort": false` 关闭。
+**兼容策略**：`thinking` 参数始终发送（所有厂商支持）。`reasoning_effort` 默认不发送（避免不兼容的上游返回 400 错误）；如需启用，可通过 `--reasoning-effort` CLI 参数或配置文件 `"reasoningEffort": true` 开启。
 
 ### 会话管理
 
@@ -380,7 +380,7 @@ const { app, port } = createTransfer({
 - **Token 用量**：从上游流式响应中提取 usage，Codex 可正确显示上下文占用率（修复 0% 问题）
 - **用量详情**：自动映射 `cached_tokens` 和 `reasoning_tokens`，兼容 OpenAI 和 DeepSeek 两种上游格式
 - **推理强度**：映射 `reasoning.effort` 到 DeepSeek `thinking`/`reasoning_effort`、MiMo/Kimi/GLM `thinking` 开关
-- **配置化控制**：新增 `--no-reasoning-effort` / `reasoningEffort` 配置项，按需剥离推理强度参数
+- **配置化控制**：`reasoning_effort` 默认关闭，可通过 `--reasoning-effort` 或 `reasoningEffort` 配置项按需开启
 
 ### v0.2.0 (2026-05-07)
 

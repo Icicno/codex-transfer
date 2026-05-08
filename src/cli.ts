@@ -35,8 +35,8 @@ for (let i = 0; i < args.length; i++) {
     overrides.configPath = args[++i];
   } else if ((a === "--model" || a === "-m") && args[i + 1]) {
     overrides.model = args[++i];
-  } else if (a === "--no-reasoning-effort") {
-    overrides.reasoningEffort = "false";
+  } else if (a === "--reasoning-effort") {
+    overrides.reasoningEffort = "true";
   } else if (a === "--help" || a === "-h") {
     console.log(`
 codex-transfer — Responses API ↔ Chat Completions bridge
@@ -51,7 +51,7 @@ Options:
   -m, --model MODEL      Override model name (highest priority model mapping)
   -c, --config PATH      Path to config file (JSON)
   -k, --insecure         Skip TLS certificate verification
-      --no-reasoning-effort  Don't send reasoning_effort to upstream
+      --reasoning-effort   Send reasoning effort to upstream (default: off)
   -d, --daemon           Run in background, logs to logs/ directory
   -h, --help             Show this help
 
@@ -61,7 +61,7 @@ Environment variables:
   CODEX_TRANSFER_API_KEY      Same as --api-key
   CODEX_TRANSFER_CONFIG       Same as --config
   CODEX_TRANSFER_INSECURE     Set to "1" to skip TLS verification
-  CODEX_TRANSFER_REASONING_EFFORT  Set to "0" to disable reasoning_effort
+  CODEX_TRANSFER_REASONING_EFFORT  Set to "1" to enable reasoning_effort
 
 Config file options:
   modelMap               Model name mapping, e.g. {"*": "deepseek-v4-pro"}
