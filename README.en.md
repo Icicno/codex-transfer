@@ -1,5 +1,7 @@
 # codex-transfer
 
+**English** | [中文](./README.md)
+
 > Responses API ↔ Chat Completions translation bridge — use DeepSeek, Kimi, Qwen, and other OpenAI-compatible providers with Codex CLI.
 
 ## Overview
@@ -368,6 +370,25 @@ const { app, port } = createTransfer({
   disableTlsVerify: true,
 });
 ```
+
+---
+
+## Changelog
+
+### v0.3.0 (2026-05-08)
+
+- **Token usage**: Extract usage from upstream streaming responses — Codex now correctly displays context utilization (fixes 0% display issue)
+- **Usage details**: Auto-map `cached_tokens` and `reasoning_tokens`, compatible with both OpenAI and DeepSeek upstream formats
+- **Reasoning effort**: Map `reasoning.effort` to DeepSeek `thinking`/`reasoning_effort` and MiMo/Kimi/GLM `thinking` toggle
+- **Config-driven control**: New `--no-reasoning-effort` / `reasoningEffort` option to strip reasoning effort parameters on demand
+
+### v0.2.0 (2026-05-07)
+
+- First npm release
+- Responses API ↔ Chat Completions bidirectional protocol translation
+- Streaming SSE event generation, session management, reasoning model support
+- Model name mapping, daemon mode, log rotation
+- TLS certificate bypass, config file support
 
 ---
 

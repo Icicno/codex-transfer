@@ -1,5 +1,7 @@
 # codex-transfer
 
+[English](./README.en.md) | **中文**
+
 > Responses API ↔ Chat Completions 协议翻译桥接 — 让 Codex CLI 无缝对接 DeepSeek、Kimi、Qwen 等任意 OpenAI 兼容厂商。
 
 ## 概述
@@ -368,6 +370,25 @@ const { app, port } = createTransfer({
   disableTlsVerify: true,
 });
 ```
+
+---
+
+## 更新日志
+
+### v0.3.0 (2026-05-08)
+
+- **Token 用量**：从上游流式响应中提取 usage，Codex 可正确显示上下文占用率（修复 0% 问题）
+- **用量详情**：自动映射 `cached_tokens` 和 `reasoning_tokens`，兼容 OpenAI 和 DeepSeek 两种上游格式
+- **推理强度**：映射 `reasoning.effort` 到 DeepSeek `thinking`/`reasoning_effort`、MiMo/Kimi/GLM `thinking` 开关
+- **配置化控制**：新增 `--no-reasoning-effort` / `reasoningEffort` 配置项，按需剥离推理强度参数
+
+### v0.2.0 (2026-05-07)
+
+- 首次 npm 发布
+- Responses API ↔ Chat Completions 双向协议翻译
+- 流式 SSE 事件序列生成、会话管理、推理模型支持
+- 模型名称映射、Daemon 模式、日志轮转
+- TLS 证书跳过、配置文件支持
 
 ---
 
