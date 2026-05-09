@@ -41,8 +41,8 @@ export interface ResponsesResponse {
   usage: ResponsesUsage;
 }
 
-/** Output item in a Responses API response — message or function_call. */
-export type ResponsesOutputItem = ResponsesMessageOutput | ResponsesFunctionCallOutput;
+/** Output item in a Responses API response — message, function_call, or mcp_call. */
+export type ResponsesOutputItem = ResponsesMessageOutput | ResponsesFunctionCallOutput | ResponsesMcpCallOutput;
 
 export interface ResponsesMessageOutput {
   type: "message";
@@ -58,6 +58,16 @@ export interface ResponsesFunctionCallOutput {
   name: string;
   arguments: string;
   status: "completed" | "in_progress";
+}
+
+export interface ResponsesMcpCallOutput {
+  type: "mcp_call";
+  id: string;
+  name: string;
+  server_label: string;
+  arguments: string;
+  output: string;
+  error: string | null;
 }
 
 export interface ResponsesUsage {

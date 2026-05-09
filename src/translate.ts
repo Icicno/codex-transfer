@@ -130,6 +130,19 @@ export function toChatRequest(
   // Map Responses API reasoning.effort → Chat Completions thinking + reasoning_effort
   const reasoningFields = mapReasoningEffort(req.reasoning?.effort);
 
+  // Log conversion summary
+  const inputCount = typeof req.input === "string" ? 1 : (req.input as unknown[])?.length ?? 0;
+  const reasoningLabel = req.reasoning?.effort ?? "none";
+  const toolNames = filteredTools.map((t) => {
+    const f = (t as Record<string, unknown>).function as Record<string, unknown> | undefined;
+    return (f?.name ?? t.name ?? "?") as string;
+  });
+  console.log(
+    `[translate] → Responses→Chat: ${inputCount} input items → ${reordered.length} messages, ` +
+    `${filteredTools.length} tools${toolNames.length > 0 ? ` [${toolNames.join(", ")}]` : ""}, ` +
+    `reasoning=${reasoningLabel}`
+  );
+
   return {
     model: req.model,
     messages: reordered,
@@ -278,6 +291,19 @@ export function fromChatResponse(
 
   const respUsage = mapUsage(usage);
 
+  // Log conversion summary
+  const textLen = text.length;
+  const toolCallCount = choice.message.tool_calls?.length ?? 0;
+  const outputTypes = output.map((o) => o.type).join(", ");
+  console.log(
+    `[translate] ← Chat→Responses: output=[${outputTypes}], ` +
+    `text=${textLen} chars, tool_calls=${toolCallCount}, ` +
+    `usage: ${respUsage.input_tokens}→${respUsage.output_tokens} tokens` +
+    (respUsage.output_tokens_details?.reasoning_tokens
+      ? ` (reasoning=${respUsage.output_tokens_details.reasoning_tokens})`
+      : "")
+  );
+
   const response: ResponsesResponse = {
     id,
     object: "response",
@@ -353,6 +379,11 @@ function reorderForToolCalls(messages: ChatMessage[]): ChatMessage[] {
   );
   if (!hasToolCalls) return messages;
 
+  // Count tool_call groups for logging
+  const toolCallCount = messages.filter(
+    (m) => m.role === "assistant" && m.tool_calls?.length
+  ).length;
+
   // Build a lookup map: tool_call_id → tool message
   const toolMsgMap = new Map<string, ChatMessage>();
   for (const msg of messages) {
@@ -404,6 +435,13 @@ function reorderForToolCalls(messages: ChatMessage[]): ChatMessage[] {
     if (!consumedToolIds.has(callId)) {
       result.push(msg);
     }
+  }
+
+  if (result.length !== messages.length || consumedToolIds.size > 0) {
+    console.log(
+      `[translate] ← Reordered ${toolCallCount} tool_call group(s), ` +
+      `${consumedToolIds.size} tool message(s) repositioned`
+    );
   }
 
   return result;

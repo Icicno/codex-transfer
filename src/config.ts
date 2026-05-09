@@ -1,5 +1,6 @@
 import { readFileSync, existsSync, mkdirSync } from "node:fs";
 import { resolve, join, dirname } from "node:path";
+import type { McpServerConfig } from "./mcp/types.js";
 
 export interface Config {
   port: number;
@@ -9,9 +10,11 @@ export interface Config {
   insecure: boolean;
   /** Model name mapping: { "codex-auto-review": "deepseek-v4-pro", "*": "deepseek-v4-pro" } */
   modelMap: Record<string, string>;
-  /** Whether to send reasoning_effort to upstream (default: true).
+  /** Whether to send reasoning_effort to upstream (default: false).
    *  Set to false if the upstream rejects this field. The thinking toggle is always sent. */
   reasoningEffort: boolean;
+  /** MCP server configurations (v1: HTTP Streamable only) */
+  mcpServers: Record<string, McpServerConfig>;
 }
 
 const DEFAULT_CONFIG: Config = {
@@ -21,6 +24,7 @@ const DEFAULT_CONFIG: Config = {
   insecure: false,
   modelMap: {},
   reasoningEffort: false,
+  mcpServers: {},
 };
 
 /**
@@ -48,6 +52,7 @@ export function loadConfig(configPath?: string): Config {
     reasoningEffort: parseBool(
         process.env.CODEX_TRANSFER_REASONING_EFFORT ?? fileConfig.reasoningEffort ?? false
     ),
+    mcpServers: fileConfig.mcpServers ?? DEFAULT_CONFIG.mcpServers,
   };
 }
 
@@ -58,6 +63,7 @@ interface FileConfig {
   insecure?: boolean;
   modelMap?: Record<string, string>;
   reasoningEffort?: boolean;
+  mcpServers?: Record<string, McpServerConfig>;
 }
 
 /**
@@ -98,6 +104,9 @@ function loadConfigFile(explicitPath?: string): FileConfig {
             ? parsed.modelMap as Record<string, string>
             : undefined,
           reasoningEffort: typeof parsed.reasoningEffort === "boolean" ? parsed.reasoningEffort : undefined,
+          mcpServers: typeof parsed.mcpServers === "object" && parsed.mcpServers !== null
+            ? parsed.mcpServers as Record<string, McpServerConfig>
+            : undefined,
         };
       } catch {
         // Ignore parse errors, continue to next path

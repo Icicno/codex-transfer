@@ -2,6 +2,7 @@ import { randomUUID } from "node:crypto";
 import type { ChatMessage, ChatRequest, ChatStreamChunk, ChatUsage } from "./types.js";
 import type { SessionStore } from "./session.js";
 import { mapUsage } from "./translate.js";
+import { formatSSE } from "./mcp/serialize.js";
 
 export interface StreamArgs {
   url: string;
@@ -139,6 +140,12 @@ export async function* translateStream(
 
         if (readResult.done) break;
         buffer += decoder.decode(readResult.value, { stream: true });
+
+        // Guard against unbounded buffer growth from malformed upstream
+        if (buffer.length > 10 * 1024 * 1024) {
+          console.error(`[transfer] SSE buffer exceeded 10 MB — aborting stream`);
+          break;
+        }
 
         // Parse complete lines from buffer (handle both \n and \r\n)
         const lines = buffer.split(/\r?\n/);
@@ -415,7 +422,20 @@ export async function* translateStream(
       },
     });
 
-    console.log(`[transfer] stream completed: ${accumulatedText.length} chars, ${toolCalls.size} tool calls`);
+    const toolCallNames = [...toolCalls.values()].map((tc) => tc.name || "?");
+    const usageSummary = streamUsage
+      ? `usage: ${streamUsage.prompt_tokens ?? 0}→${streamUsage.completion_tokens ?? 0} tokens` +
+        (streamUsage.completion_tokens_details?.reasoning_tokens
+          ? ` (reasoning=${streamUsage.completion_tokens_details.reasoning_tokens})`
+          : "")
+      : "usage: unavailable";
+
+    console.log(
+      `[transfer] ✓ Stream completed: ${accumulatedText.length} chars text, ` +
+      `${toolCalls.size} tool call(s)${toolCallNames.length > 0 ? ` [${toolCallNames.join(", ")}]` : ""}, ` +
+      `reasoning=${accumulatedReasoning.length} chars, ${usageSummary}`
+    );
+    console.log(`[transfer]   Session saved: ${responseId} (${messages.length} messages)`);
   } catch (e) {
     // Top-level catch: prevent unhandled exceptions from killing the stream silently
     if (signal?.aborted) return;
@@ -443,7 +463,4 @@ function sseFailed(
   });
 }
 
-/** Format a data payload as an SSE event string. */
-function formatSSE(event: string, data: unknown): string {
-  return `event: ${event}\ndata: ${JSON.stringify(data)}\n\n`;
-}
+

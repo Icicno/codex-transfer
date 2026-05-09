@@ -110,10 +110,23 @@ if (daemonMode) {
   process.exit(0);
 }
 
-// ── Child process (or foreground): set up log redirection if needed ──────────
+// ── Timestamped logging (always active) ──────────────────────────────────────
+
+/** Format date as `yyyy-MM-dd HH:mm:ss` for log prefixes. */
+function formatTimestamp(d: Date): string {
+  const pad = (n: number) => String(n).padStart(2, "0");
+  return (
+    `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}` +
+    ` ${pad(d.getHours())}:${pad(d.getMinutes())}:${pad(d.getSeconds())}`
+  );
+}
+
+const _stdoutWrite = process.stdout.write.bind(process.stdout);
+const _stderrWrite = process.stderr.write.bind(process.stderr);
 
 const logFile = process.env.__CODEX_TRANSFER_LOG;
 if (logFile) {
+  // Daemon mode: redirect to log file with rotation
   const logFilePath: string = logFile;
   const MAX_LOG_SIZE = 10 * 1024 * 1024; // 10MB
   const MAX_LOG_FILES = 5;
@@ -150,13 +163,27 @@ if (logFile) {
       const ts = formatTimestamp(new Date());
       appendFileSync(logFilePath, `[${ts} transfer] ${msg}\n`);
     } catch {
-      process.stderr.write(msg + "\n");
+      _stderrWrite(`[${formatTimestamp(new Date())} transfer] ${msg}\n`);
     }
   }
 
   console.log = (...args: unknown[]) => logWrite(args.map(String).join(" "));
   console.error = (...args: unknown[]) => logWrite("[ERROR] " + args.map(String).join(" "));
   console.warn = (...args: unknown[]) => logWrite("[WARN] " + args.map(String).join(" "));
+} else {
+  // Foreground mode: add timestamps to stdout/stderr
+  console.log = (...args: unknown[]) => {
+    const ts = formatTimestamp(new Date());
+    _stdoutWrite(`[${ts} transfer] ${args.map(String).join(" ")}\n`);
+  };
+  console.error = (...args: unknown[]) => {
+    const ts = formatTimestamp(new Date());
+    _stderrWrite(`[${ts} transfer] [ERROR] ${args.map(String).join(" ")}\n`);
+  };
+  console.warn = (...args: unknown[]) => {
+    const ts = formatTimestamp(new Date());
+    _stderrWrite(`[${ts} transfer] [WARN] ${args.map(String).join(" ")}\n`);
+  };
 }
 
 // ── Start server ────────────────────────────────────────────────────────────
@@ -181,15 +208,6 @@ serve({ fetch: app.fetch, port }, (info) => {
 });
 
 // ── Helpers ──────────────────────────────────────────────────────────────────
-
-/** Format date as `yyyy-MM-dd HH:mm:ss` for log prefixes. */
-function formatTimestamp(d: Date): string {
-  const pad = (n: number) => String(n).padStart(2, "0");
-  return (
-    `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}` +
-    ` ${pad(d.getHours())}:${pad(d.getMinutes())}:${pad(d.getSeconds())}`
-  );
-}
 
 /** Format date as `yyyyMMdd-HHmmss` for log filenames. */
 function formatTimestampCompact(d: Date): string {

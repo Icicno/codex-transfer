@@ -16,7 +16,7 @@ Codex CLI (Responses API)  →  codex-transfer (:4444)  →  Third-party Provide
 
 - **Zero runtime dependencies**: esbuild bundles everything into a single `dist/codex-transfer.mjs` file — run via `npx` instantly
 - **Stateless by design**: in-process session management, no external database required
-- **~1500 lines of TypeScript**: lightweight and auditable
+- **~2900 lines of TypeScript**: lightweight and auditable
 
 ---
 
@@ -95,6 +95,51 @@ Create a JSON config file at one of these locations (searched in order):
   "modelMap": {
     "*": "deepseek-v4-pro",
     "codex-auto-review": "deepseek-v4-pro"
+  },
+  "mcpServers": {
+    "exa": {
+      "url": "https://mcp.exa.ai/mcp",
+      "headers": { "Authorization": "Bearer exa-api-key" }
+    }
+  }
+}
+```
+
+### MCP Server Configuration
+
+v0.4.0 introduces a built-in MCP (Model Context Protocol) client. Declare MCP servers in the `mcpServers` config field — the proxy auto-discovers tools and injects them into LLM requests.
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `url` | `string?` | Remote MCP server URL (HTTP Streamable transport) |
+| `headers` | `Record<string, string>?` | Custom HTTP headers (e.g. `Authorization`) sent with every request |
+| `command` | `string?` | Local MCP server spawn command (stdio mode, not yet supported in v0.4.0) |
+| `args` | `string[]?` | Command arguments |
+| `env` | `Record<string, string>?` | Environment variables injected into the child process |
+
+> **v1 limitation**: Only HTTP Streamable transport (`url`) is supported. stdio mode (`command`) is not yet implemented.
+
+**Remote server with API key:**
+
+```json
+{
+  "mcpServers": {
+    "exa": {
+      "url": "https://mcp.exa.ai/mcp",
+      "headers": { "Authorization": "Bearer your-api-key" }
+    }
+  }
+}
+```
+
+**Public server without API key:**
+
+```json
+{
+  "mcpServers": {
+    "gitmcp": {
+      "url": "https://gitmcp.io/owner/repo"
+    }
   }
 }
 ```
@@ -145,9 +190,14 @@ Codex request arrives
   → resolveModel() model name mapping
   → Load message history (via previous_response_id)
   → toChatRequest() protocol translation
+  → MCP: connect to servers + inject tool definitions (if configured)
   → Branch:
-     ├─ stream=true  → translateStream() SSE generator → text/event-stream
-     └─ stream=false → fetch upstream → fromChatResponse() → JSON
+     ├─ stream=true
+     │   ├─ has MCP tools → mcpAgenticLoop() → mcpResultToSSE() → text/event-stream
+     │   └─ no MCP tools  → translateStream() SSE generator → text/event-stream
+     └─ stream=false
+         ├─ has MCP tools → mcpAgenticLoop() → JSON
+         └─ no MCP tools  → fetch upstream → fromChatResponse() → JSON
 ```
 
 ---
@@ -254,6 +304,42 @@ The two mechanisms complement each other, covering both conversation replay mode
 - **Parallel tool calls**: Consecutive `function_call` input items are merged into a single assistant message with multiple `tool_calls` entries
 - **Message reordering**: Codex may interleave other messages between `function_call` and `function_call_output` items, but providers like DeepSeek strictly require `assistant(tool_calls)` immediately followed by matching `tool` messages. `reorderForToolCalls()` handles this automatically, synthesizing empty output for orphaned tool calls
 
+### MCP Client Proxy (v0.4.0)
+
+Built-in MCP client that automatically handles tool discovery, invocation, and result delivery, enabling Codex CLI to use any MCP server's tools (file system operations, database queries, web search, etc.).
+
+**Workflow:**
+
+```
+Codex request arrives
+  → Proxy injects MCP tools (converted to function definitions)
+  → LLM returns MCP tool call (identified by __mcp_{server}::{tool} prefix)
+  → Proxy calls MCP server via JSON-RPC 2.0
+  → Result fed back to LLM, loops until plain text response
+  → Final response returned to Codex
+```
+
+**Agentic Loop**: When all tool calls from the LLM are MCP tools, the proxy automatically executes them and feeds results back, looping up to 10 times until the LLM returns a plain text response or a regular function call.
+
+**Output format**: MCP tool call results are presented as `mcp_call` type output items, containing tool name, server label, arguments, output, and error information.
+
+**Zero new deps**: Hand-written JSON-RPC 2.0 over HTTP, only supports HTTP Streamable transport, no additional npm packages.
+
+**API key support**: Configure per-server authentication via the `headers` field:
+
+```json
+{
+  "mcpServers": {
+    "exa": {
+      "url": "https://mcp.exa.ai/mcp",
+      "headers": { "Authorization": "Bearer your-key" }
+    }
+  }
+}
+```
+
+Servers without API keys simply omit the `headers` field.
+
 ### Health Check
 
 ```
@@ -263,9 +349,33 @@ GET /health → 200 OK
   "apiKeySet": true,
   "apiKeyPrefix": "sk-abc…",
   "upstreamStatus": 200,
-  "upstreamOk": true
+  "upstreamOk": true,
+  "mcpServers": true
 }
 ```
+
+### Logging System
+
+All modes (foreground + daemon) output timestamped logs:
+
+```
+[2026-05-09 19:04:51 transfer] [mcp] exa/web_search_exa: OK (9079 chars)
+[2026-05-09 19:04:51 transfer] [translate] → Responses→Chat: 16 input items → 20 messages, 15 tools, reasoning=none
+[2026-05-09 19:04:52 transfer] [mcp] exa/web_search_exa: ERROR — Connection timeout
+```
+
+- **Timestamps**: Format `[yyyy-MM-dd HH:mm:ss transfer]`, active in both foreground and daemon modes
+- **Daemon log rotation**: Auto-rotates when a single file exceeds 10MB, keeps 5 historical files
+- **MCP error details**: Full error message output on tool call failures
+
+### Resource Management (v0.4.0 Hardening)
+
+- **Session memory reclamation**: `SessionStore` uses TTL expiration (30 min) + LRU capacity limits (history 1000, reasoning 5000) + periodic cleanup (5 min) to prevent OOM in long-running processes
+- **Connection leak prevention**: All `fetch` response bodies are properly consumed via `cancel()`, preventing TCP connection pool exhaustion
+- **Request cancellation**: `AbortSignal` propagates through upstream requests and MCP Agentic Loop — stops processing immediately when client disconnects
+- **Non-streaming MCP timeout**: Non-streaming MCP Agentic Loop enforces a 120-second timeout to prevent indefinite waits when upstream LLM hangs
+- **Graceful shutdown**: On `SIGTERM`/`SIGINT`, the process automatically calls `mcpManager.close()`, sending close notifications to all MCP servers
+- **SSE buffer limits**: Both stream parser and MCP client enforce 10MB buffer limits to prevent memory exhaustion from malformed data
 
 ---
 
@@ -308,12 +418,18 @@ wire_api = "responses"
 ```
 src/
 ├── cli.ts         CLI entry — argument parsing, daemon process management, log rotation
-├── server.ts      HTTP server — Hono route registration, request dispatch, proxy instance creation
+├── server.ts      HTTP server — Hono route registration, request dispatch
 ├── config.ts      Configuration — multi-source merging, priority control, config file discovery
-├── session.ts     Session state — message history storage, dual-index reasoning cache
+├── session.ts     Session state — message history storage, dual-index reasoning cache, LRU eviction
 ├── translate.ts   Protocol translation — Responses ↔ Chat Completions bidirectional conversion
 ├── stream.ts      SSE translation — streaming chunk parsing, event sequence generation, error fallback
-└── types.ts       Type definitions — complete TypeScript types for both APIs
+├── types.ts       Type definitions — complete TypeScript types for both APIs
+└── mcp/
+    ├── types.ts     MCP protocol types — JSON-RPC 2.0, McpServerConfig, McpTool
+    ├── client.ts    MCP client — HTTP Streamable JSON-RPC, SSE response parsing
+    ├── manager.ts   MCP manager — connection lifecycle, tool cache, multi-server management
+    ├── loop.ts      MCP Agentic Loop — multi-turn tool call cycle, upstream request wrapper
+    └── serialize.ts MCP serialization — mcpResultToSSE conversion, shared formatSSE utility
 build.mjs          Build script — esbuild single-file bundling
 ```
 
@@ -321,22 +437,27 @@ build.mjs          Build script — esbuild single-file bundling
 
 ```
 cli.ts → server.ts → translate.ts + stream.ts → session.ts + types.ts
-                  → config.ts
+                   → mcp/loop.ts (callUpstream, mcpAgenticLoop)
+                   → mcp/serialize.ts (mcpResultToSSE, formatSSE)
+                   → mcp/manager.ts → mcp/client.ts → mcp/types.ts
+                   → config.ts
 ```
 
 ### Data Flow
 
 ```
-                    ┌─────────────┐
-                    │   Config    │ ◄── CLI / ENV / File
-                    └──────┬──────┘
-                           │
+                     ┌─────────────┐
+                     │   Config    │ ◄── CLI / ENV / File
+                     └──────┬──────┘
+                            │
   Codex ──POST──► Server ──┼──► toChatRequest() ──► fetch ──► Upstream
-    ▲              │       │                                    │
-    │              │   SessionStore                             │
-    └──SSE/JSON────┘   (history +                               │
-                        reasoning)  ◄── translateStream() ──────┘
-                                    ◄── fromChatResponse()
+    ▲              │       │         │                          │
+    │              │   SessionStore   ├─ MCP tools ──► McpManager ──► MCP Server
+    └──SSE/JSON────┘   (history +    │
+                        reasoning)   ├── mcpAgenticLoop() ◄── mcp/loop.ts
+                                     ├── mcpResultToSSE() ◄── mcp/serialize.ts
+                                     └── translateStream() ◄── stream.ts
+                                          ◄── fromChatResponse()
 ```
 
 ---
@@ -374,6 +495,27 @@ const { app, port } = createTransfer({
 ---
 
 ## Changelog
+
+### v0.4.0 (2026-05-09)
+
+#### New Features
+
+- **MCP Client Proxy**: Built-in MCP (Model Context Protocol) client — declare MCP servers in config, the proxy auto-discovers tools, injects them into LLM requests, executes calls, and delivers results
+- **MCP Agentic Loop**: When the LLM returns MCP tool calls, the proxy auto-executes and loops back, up to 10 iterations, until a plain text response
+- **MCP headers support**: Per-server authentication via the `headers` field (e.g. `Authorization: Bearer xxx`). Servers without API keys simply omit it
+- **MCP error details**: Tool call failures output the full error message
+- **Full-chain logging**: `translate.ts` (request/response conversion details), `server.ts` (MCP loop iterations, session saves), `stream.ts` (streaming completion stats) all emit detailed logs
+- **Foreground timestamps**: Foreground mode now outputs `[yyyy-MM-dd HH:mm:ss transfer]` timestamps 
+
+#### Resource Management Hardening
+
+- **SessionStore LRU eviction**: TTL 30min expiration + periodic cleanup 5min + capacity limits (history 1000, reasoning 5000) — prevents OOM in long-running processes
+- **AbortSignal propagation**: `callUpstream` and `mcpAgenticLoop` support immediate cancellation when client disconnects
+- **Connection leak prevention**: All `fetch` response bodies properly consumed via `cancel()`
+- **SSE buffer limits**: Both stream parser and MCP client enforce 10MB buffer limits
+- **/v1/models timeout**: 15-second request timeout added
+
+Note: The newly added mcp client proxy function in version v0.4.0 is internally executed and called by Codex-Transfer. Therefore, if there is a call from the mcp tool, the first response of the codex cli/app will seem slightly slower (non-streaming output).
 
 ### v0.3.3 (2026-05-09)
 
