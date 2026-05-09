@@ -496,6 +496,11 @@ const { app, port } = createTransfer({
 
 ## Changelog
 
+### v0.4.1 (2026-05-09)
+
+- **Fix daemon mode unable to stop**: `kill $(cat codex-transfer.pid)` now correctly stops the background process (previously the SIGTERM handler only closed MCP connections without exiting the process)
+- **PID file auto-cleanup**: PID file is automatically removed on graceful exit to avoid stale files
+
 ### v0.4.0 (2026-05-09)
 
 #### New Features

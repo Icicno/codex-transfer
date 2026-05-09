@@ -96,6 +96,7 @@ if (daemonMode) {
     env: {
       ...process.env,
       __CODEX_TRANSFER_LOG: logFile,
+      __CODEX_TRANSFER_PID: pidFile,
     },
   });
 
@@ -203,9 +204,27 @@ const { app, port } = createTransfer({
 });
 
 const { serve } = await import("@hono/node-server");
-serve({ fetch: app.fetch, port }, (info) => {
+const server = serve({ fetch: app.fetch, port }, (info) => {
   console.log(`codex-transfer listening on 127.0.0.1:${info.port}`);
 });
+
+// ── Graceful shutdown: close HTTP server + exit ─────────────────────────────
+// (server.ts also registers SIGTERM/SIGINT to close MCP connections)
+const pidFilePath = process.env.__CODEX_TRANSFER_PID;
+const gracefulShutdown = () => {
+  console.log("[transfer] shutting down...");
+  server.close(() => {
+    console.log("[transfer] server closed");
+    if (pidFilePath) {
+      try { unlinkSync(pidFilePath); } catch { /* ignore */ }
+    }
+    process.exit(0);
+  });
+  // Force exit if close doesn't complete in 5s
+  setTimeout(() => process.exit(1), 5_000).unref();
+};
+process.on("SIGTERM", gracefulShutdown);
+process.on("SIGINT", gracefulShutdown);
 
 // ── Helpers ──────────────────────────────────────────────────────────────────
 

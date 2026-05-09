@@ -494,6 +494,11 @@ const { app, port } = createTransfer({
 
 ## 更新日志
 
+### v0.4.1 (2026-05-09)
+
+- **修复 daemon 模式无法停止**：`kill $(cat codex-transfer.pid)` 现在可以正确停止后台进程（此前 SIGTERM handler 只关闭 MCP 连接，未退出进程）
+- **PID 文件自动清理**：进程正常退出时自动删除 PID 文件，避免残留过期文件
+
 ### v0.4.0 (2026-05-09)
 
 #### 新功能
